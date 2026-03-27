@@ -1,0 +1,74 @@
+# ========================
+# IntelliJ IDEA
+# ========================
+.idea/
+*.iml
+*.iws
+out/
+
+# ========================
+# Eclipse / VS Code (Just in case)
+# ========================
+.project
+.classpath
+.settings/
+.vscode/
+
+# ========================
+# Maven
+# ========================
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+# https://github.com/takari/maven-wrapper#usage-without-binary-jar
+.mvn/wrapper/maven-wrapper.jar
+
+# ========================
+# Java / Spring Boot
+# ========================
+*.class
+*.log
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# ========================
+# MkDocs & Python
+# ========================
+site/
+.cache/
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# ========================
+# OS Generated Files
+# ========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ========================
+# Secrets / Local Configs
+# ========================
+*.env
+*.env.local
+application-secret.yml
