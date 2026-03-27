@@ -1,29 +1,4 @@
-server:
-  port: 8080
-
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/control_plane
-    username: controlplane
-    password: controlplane
-  jpa:
-    hibernate:
-      ddl-auto: none
-    open-in-view: false
-  flyway:
-    enabled: true
-  data:
-    redis:
-      host: localhost
-      port: 6379
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
+logging:
+  level:
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
