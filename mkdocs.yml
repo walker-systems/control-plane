@@ -1,0 +1,15 @@
+site_name: ControlPlane
+site_url: https://walker-systems.github.io/control-plane/
+repo_url: https://github.com/walker-systems/control-plane
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API: api.md
+  - Deployment: deployment.md
+  - Roadmap: roadmap.md
