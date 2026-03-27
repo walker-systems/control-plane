@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://walker-systems.github.io/control-plane/</loc>
+         <lastmod>2026-03-27</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://walker-systems.github.io/control-plane/api/</loc>
+         <lastmod>2026-03-27</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://walker-systems.github.io/control-plane/architecture/</loc>
+         <lastmod>2026-03-27</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://walker-systems.github.io/control-plane/deployment/</loc>
+         <lastmod>2026-03-27</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+    <url>
+         <loc>https://walker-systems.github.io/control-plane/roadmap/</loc>
+         <lastmod>2026-03-27</lastmod>
+         <changefreq>daily</changefreq>
+    </url>
+</urlset>
