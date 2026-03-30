@@ -1,5 +1,10 @@
 # ControlPlane ERD
 
+> Note: Mermaid ER diagrams use `PK`, `FK`, and `UK` as key markers.
+> - `PK` = primary key
+> - `FK` = foreign key
+> - `UK` = unique key
+
 ```mermaid
 erDiagram
     USERS {
@@ -7,8 +12,8 @@ erDiagram
         VARCHAR email UK
         VARCHAR password_hash
         VARCHAR status
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ last_login_at
+        TIMESTAMP_TZ created_at
+        TIMESTAMP_TZ last_login_at
     }
 
     ROLES {
@@ -17,46 +22,47 @@ erDiagram
     }
 
     USER_ROLES {
-        UUID user_id PK, FK
-        UUID role_id PK, FK
+        UUID user_id FK
+        UUID role_id FK
     }
 
     REFRESH_TOKENS {
         UUID id PK
         UUID user_id FK
         VARCHAR token_hash UK
-        TIMESTAMPTZ expires_at
-        TIMESTAMPTZ revoked_at
-        TIMESTAMPTZ created_at
+        TIMESTAMP_TZ expires_at
+        TIMESTAMP_TZ revoked_at
+        TIMESTAMP_TZ created_at
     }
 
     JOBS {
         UUID id PK
         UUID owner_user_id FK
-        VARCHAR type
+        UUID source_schedule_id FK
         JSONB payload_json
+        VARCHAR type
         VARCHAR status
         VARCHAR priority
         VARCHAR idempotency_key UK
         INT max_retries
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
+        TIMESTAMP_TZ created_at
+        TIMESTAMP_TZ updated_at
     }
 
     JOB_SCHEDULES {
         UUID id PK
         UUID owner_user_id FK
-        VARCHAR type
         JSONB payload_json
+        VARCHAR type
         VARCHAR priority
         INT max_retries
         VARCHAR cron_expression
         VARCHAR timezone
-        TIMESTAMPTZ next_run_at
-        TIMESTAMPTZ last_enqueued_at
+        TIMESTAMP_TZ next_run_at
+        TIMESTAMP_TZ last_enqueued_at
         BOOLEAN paused
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
+        TIMESTAMP_TZ created_at
+        TIMESTAMP_TZ updated_at
     }
 
     JOB_EXECUTIONS {
@@ -65,12 +71,12 @@ erDiagram
         VARCHAR worker_id
         INT attempt_number
         VARCHAR status
-        TIMESTAMPTZ started_at
-        TIMESTAMPTZ finished_at
-        TIMESTAMPTZ lease_expires_at
+        TIMESTAMP_TZ started_at
+        TIMESTAMP_TZ finished_at
+        TIMESTAMP_TZ lease_expires_at
         TEXT error_message
         TEXT output_summary
-        TIMESTAMPTZ created_at
+        TIMESTAMP_TZ created_at
     }
 
     AUDIT_EVENTS {
@@ -82,7 +88,7 @@ erDiagram
         JSONB metadata_json
         VARCHAR ip_address
         TEXT user_agent
-        TIMESTAMPTZ created_at
+        TIMESTAMP_TZ created_at
     }
 
     USERS ||--o{ USER_ROLES : has
@@ -93,13 +99,18 @@ erDiagram
     USERS ||--o{ JOB_SCHEDULES : owns
     USERS o|--o{ AUDIT_EVENTS : performs
 
+    JOB_SCHEDULES o|--o{ JOBS : generates
     JOBS ||--o{ JOB_EXECUTIONS : has
 ```
 
 ## Notes
 
 - `USER_ROLES` is the join table for the many-to-many relationship between `USERS` and `ROLES`.
+- `USER_ROLES` has a composite primary key of `(user_id, role_id)`.
 - `REFRESH_TOKENS`, `JOBS`, and `JOB_SCHEDULES` all belong to a user.
+- `JOBS.source_schedule_id` is nullable:
+  - `NULL` means the job was created manually
+  - a value means the job was generated from a recurring schedule
 - `JOB_EXECUTIONS` stores per-attempt execution history for a job.
 - `AUDIT_EVENTS.actor_user_id` is nullable, so an audit event may exist even if the actor is later removed or unavailable.
 - `JOBS` and `JOB_SCHEDULES` are intentionally separate:
