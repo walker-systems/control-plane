@@ -44,9 +44,6 @@ class UserRepositoryTest {
     @Test
     void existsByEmail_returnsTrue_whenUserExists() {
         User user = new User(null, "exists@example.com", "hashed-password", UserStatus.ACTIVE);
-        user.setEmail("exists@example.com");
-        user.setPasswordHash("hashed-password");
-        user.setStatus(UserStatus.ACTIVE);
 
         userRepository.saveAndFlush(user);
 
