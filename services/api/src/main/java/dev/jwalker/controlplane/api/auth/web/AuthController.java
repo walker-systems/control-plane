@@ -7,6 +7,7 @@ import dev.jwalker.controlplane.api.auth.web.dto.LogoutRequest;
 import dev.jwalker.controlplane.api.auth.web.dto.RefreshRequest;
 import dev.jwalker.controlplane.api.auth.web.dto.TokenResponse;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,13 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
-
-    public AuthController(AuthService authService) {
-        this.authService = authService;
-    }
 
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {

@@ -13,14 +13,21 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "job_schedules")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class JobSchedule {
 
     @Id
@@ -67,9 +74,6 @@ public class JobSchedule {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    protected JobSchedule() {
-    }
-
     public JobSchedule(
             UUID id,
             User owner,
@@ -107,110 +111,6 @@ public class JobSchedule {
 
     public void touch() {
         this.updatedAt = OffsetDateTime.now();
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public User getOwner() {
-        return owner;
-    }
-
-    public void setOwner(User owner) {
-        this.owner = owner;
-    }
-
-    public JobType getType() {
-        return type;
-    }
-
-    public void setType(JobType type) {
-        this.type = type;
-    }
-
-    public String getPayloadJson() {
-        return payloadJson;
-    }
-
-    public void setPayloadJson(String payloadJson) {
-        this.payloadJson = payloadJson;
-    }
-
-    public JobPriority getPriority() {
-        return priority;
-    }
-
-    public void setPriority(JobPriority priority) {
-        this.priority = priority;
-    }
-
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    public void setMaxRetries(int maxRetries) {
-        this.maxRetries = maxRetries;
-    }
-
-    public String getCronExpression() {
-        return cronExpression;
-    }
-
-    public void setCronExpression(String cronExpression) {
-        this.cronExpression = cronExpression;
-    }
-
-    public String getTimezone() {
-        return timezone;
-    }
-
-    public void setTimezone(String timezone) {
-        this.timezone = timezone;
-    }
-
-    public OffsetDateTime getNextRunAt() {
-        return nextRunAt;
-    }
-
-    public void setNextRunAt(OffsetDateTime nextRunAt) {
-        this.nextRunAt = nextRunAt;
-    }
-
-    public OffsetDateTime getLastEnqueuedAt() {
-        return lastEnqueuedAt;
-    }
-
-    public void setLastEnqueuedAt(OffsetDateTime lastEnqueuedAt) {
-        this.lastEnqueuedAt = lastEnqueuedAt;
-    }
-
-    public boolean isPaused() {
-        return paused;
-    }
-
-    public void setPaused(boolean paused) {
-        this.paused = paused;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 
     public void pause() {

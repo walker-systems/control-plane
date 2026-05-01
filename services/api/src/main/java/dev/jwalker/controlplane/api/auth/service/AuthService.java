@@ -6,29 +6,19 @@ import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
-
-    public AuthService(
-            UserRepository userRepository,
-            PasswordEncoder passwordEncoder,
-            JwtService jwtService,
-            RefreshTokenService refreshTokenService
-    ) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.refreshTokenService = refreshTokenService;
-    }
 
     @Transactional
     public TokenResponse login(String email, String password) {

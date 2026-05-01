@@ -11,10 +11,12 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class RefreshTokenService {
 
     private static final int RAW_TOKEN_BYTES = 32;
@@ -22,11 +24,6 @@ public class RefreshTokenService {
     private final RefreshTokenRepository repository;
     private final SecurityProperties props;
     private final SecureRandom random = new SecureRandom();
-
-    public RefreshTokenService(RefreshTokenRepository repository, SecurityProperties props) {
-        this.repository = repository;
-        this.props = props;
-    }
 
     @Transactional
     public IssuedRefreshToken issue(User user) {

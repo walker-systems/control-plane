@@ -11,14 +11,21 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "audit_events")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AuditEvent {
 
     @Id
@@ -52,9 +59,6 @@ public class AuditEvent {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    protected AuditEvent() {
-    }
-
     public AuditEvent(
             UUID id,
             User actor,
@@ -83,78 +87,6 @@ public class AuditEvent {
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
         }
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public User getActor() {
-        return actor;
-    }
-
-    public void setActor(User actor) {
-        this.actor = actor;
-    }
-
-    public AuditEventType getEventType() {
-        return eventType;
-    }
-
-    public void setEventType(AuditEventType eventType) {
-        this.eventType = eventType;
-    }
-
-    public String getTargetType() {
-        return targetType;
-    }
-
-    public void setTargetType(String targetType) {
-        this.targetType = targetType;
-    }
-
-    public UUID getTargetId() {
-        return targetId;
-    }
-
-    public void setTargetId(UUID targetId) {
-        this.targetId = targetId;
-    }
-
-    public String getMetadataJson() {
-        return metadataJson;
-    }
-
-    public void setMetadataJson(String metadataJson) {
-        this.metadataJson = metadataJson;
-    }
-
-    public String getIpAddress() {
-        return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
-    }
-
-    public String getUserAgent() {
-        return userAgent;
-    }
-
-    public void setUserAgent(String userAgent) {
-        this.userAgent = userAgent;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
     }
 
     public boolean hasActor() {

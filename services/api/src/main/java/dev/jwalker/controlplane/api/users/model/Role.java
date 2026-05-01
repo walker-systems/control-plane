@@ -7,9 +7,16 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.util.Objects;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "roles")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Role {
 
     @Id
@@ -18,9 +25,6 @@ public class Role {
 
     @Column(nullable = false, unique = true, length = 50)
     private String name;
-
-    protected Role() {
-    }
 
     public Role(UUID id, String name) {
         this.id = id;
@@ -32,22 +36,6 @@ public class Role {
         if (id == null) {
             id = UUID.randomUUID();
         }
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     @Override
