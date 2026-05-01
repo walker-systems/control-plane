@@ -2,3 +2,7 @@ logging:
   level:
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
+
+app:
+  security:
+    jwt-secret: local-dev-only-not-for-production-32b!

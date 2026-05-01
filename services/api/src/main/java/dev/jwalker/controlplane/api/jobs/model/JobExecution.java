@@ -13,9 +13,16 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "job_executions")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class JobExecution {
 
     @Id
@@ -54,9 +61,6 @@ public class JobExecution {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    protected JobExecution() {
-    }
-
     public JobExecution(
             UUID id,
             Job job,
@@ -79,94 +83,6 @@ public class JobExecution {
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
         }
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public Job getJob() {
-        return job;
-    }
-
-    public void setJob(Job job) {
-        this.job = job;
-    }
-
-    public String getWorkerId() {
-        return workerId;
-    }
-
-    public void setWorkerId(String workerId) {
-        this.workerId = workerId;
-    }
-
-    public int getAttemptNumber() {
-        return attemptNumber;
-    }
-
-    public void setAttemptNumber(int attemptNumber) {
-        this.attemptNumber = attemptNumber;
-    }
-
-    public JobExecutionStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(JobExecutionStatus status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getStartedAt() {
-        return startedAt;
-    }
-
-    public void setStartedAt(OffsetDateTime startedAt) {
-        this.startedAt = startedAt;
-    }
-
-    public OffsetDateTime getFinishedAt() {
-        return finishedAt;
-    }
-
-    public void setFinishedAt(OffsetDateTime finishedAt) {
-        this.finishedAt = finishedAt;
-    }
-
-    public OffsetDateTime getLeaseExpiresAt() {
-        return leaseExpiresAt;
-    }
-
-    public void setLeaseExpiresAt(OffsetDateTime leaseExpiresAt) {
-        this.leaseExpiresAt = leaseExpiresAt;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-    }
-
-    public String getOutputSummary() {
-        return outputSummary;
-    }
-
-    public void setOutputSummary(String outputSummary) {
-        this.outputSummary = outputSummary;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
     }
 
     public void markRunning(String workerId, OffsetDateTime leaseExpiresAt) {
