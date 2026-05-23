@@ -55,4 +55,8 @@ app:
     jwt-secret: ${JWT_SECRET:replace-this-in-real-env}
     access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:15}
     refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:7}
+  bootstrap:
+    enabled: ${BOOTSTRAP_ENABLED:false}
+    admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
 
