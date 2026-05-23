@@ -121,4 +121,28 @@ class JobServiceTest {
                 .hasMessageContaining(missing.toString());
         verify(jobRepository, never()).save(any());
     }
+
+    @Test
+    void findById_returnsResponse_whenJobExists() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
+        job.setCreatedAt(OffsetDateTime.now());
+        job.setUpdatedAt(OffsetDateTime.now());
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+
+        Optional<JobResponse> response = jobService.findById(jobId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().id()).isEqualTo(jobId);
+        assertThat(response.get().ownerEmail()).isEqualTo("owner@example.com");
+    }
+
+    @Test
+    void findById_returnsEmpty_whenJobMissing() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
+
+        assertThat(jobService.findById(jobId)).isEmpty();
+    }
 }

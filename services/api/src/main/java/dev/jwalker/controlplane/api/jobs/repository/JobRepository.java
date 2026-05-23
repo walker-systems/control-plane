@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface JobRepository extends JpaRepository<Job, UUID> {
 
@@ -20,4 +22,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     List<Job> findBySourceSchedule(JobSchedule sourceSchedule);
 
     Optional<Job> findByIdempotencyKey(String idempotencyKey);
+
+    @Query("SELECT j FROM Job j LEFT JOIN FETCH j.owner LEFT JOIN FETCH j.sourceSchedule WHERE j.id = :id")
+    Optional<Job> findByIdWithRelations(@Param("id") UUID id);
 }

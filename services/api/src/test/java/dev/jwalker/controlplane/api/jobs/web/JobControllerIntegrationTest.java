@@ -2,6 +2,7 @@ package dev.jwalker.controlplane.api.jobs.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -18,6 +19,7 @@ import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.RoleRepository;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -148,6 +150,59 @@ class JobControllerIntegrationTest {
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bodyJson))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void get_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/jobs/" + UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void get_withValidToken_returnsJob() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobCreateRequest body = new JobCreateRequest(
+                JobType.CUSTOMER_EXPORT, "{\"region\":\"us-west\"}", JobPriority.HIGH, 5, "idem-99");
+
+        MvcResult created = mockMvc.perform(post("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String jobId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asString();
+
+        mockMvc.perform(get("/api/jobs/" + jobId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(jobId))
+                .andExpect(jsonPath("$.ownerEmail").value("alice@example.com"))
+                .andExpect(jsonPath("$.type").value("CUSTOMER_EXPORT"))
+                .andExpect(jsonPath("$.priority").value("HIGH"))
+                .andExpect(jsonPath("$.idempotencyKey").value("idem-99"));
+    }
+
+    @Test
+    void get_whenJobMissing_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/jobs/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_withMalformedId_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/jobs/not-a-uuid")
+                        .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isBadRequest());
     }
 

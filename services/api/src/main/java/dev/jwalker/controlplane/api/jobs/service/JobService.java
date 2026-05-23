@@ -8,6 +8,7 @@ import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,5 +42,10 @@ public class JobService {
                 request.maxRetries() == null ? DEFAULT_MAX_RETRIES : request.maxRetries());
 
         return JobResponse.from(jobRepository.save(job));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<JobResponse> findById(UUID jobId) {
+        return jobRepository.findByIdWithRelations(jobId).map(JobResponse::from);
     }
 }
