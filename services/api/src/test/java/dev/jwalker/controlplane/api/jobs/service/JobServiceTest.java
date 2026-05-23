@@ -18,8 +18,13 @@ import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -144,5 +149,25 @@ class JobServiceTest {
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
 
         assertThat(jobService.findById(jobId)).isEmpty();
+    }
+
+    @Test
+    void search_passesFiltersThrough_andMapsResults() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Job job = new Job(UUID.randomUUID(), owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
+        job.setCreatedAt(OffsetDateTime.now());
+        job.setUpdatedAt(OffsetDateTime.now());
+        Page<Job> page = new PageImpl<>(List.of(job), pageable, 1);
+
+        when(jobRepository.search(JobStatus.PENDING, JobType.CRM_SYNC, null, null, null, pageable))
+                .thenReturn(page);
+
+        Page<JobResponse> result = jobService.search(
+                JobStatus.PENDING, JobType.CRM_SYNC, null, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).id()).isEqualTo(job.getId());
+        assertThat(result.getContent().get(0).ownerEmail()).isEqualTo("owner@example.com");
     }
 }

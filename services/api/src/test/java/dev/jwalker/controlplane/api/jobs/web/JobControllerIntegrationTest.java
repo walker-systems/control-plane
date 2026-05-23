@@ -207,6 +207,100 @@ class JobControllerIntegrationTest {
     }
 
     @Test
+    void list_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/jobs"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void list_returnsEmptyPage_whenNoJobs() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void list_returnsAllJobs_byDefault() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(accessToken, JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content.length()").value(3));
+    }
+
+    @Test
+    void list_filtersByType() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(accessToken, JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .param("type", "CRM_SYNC")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].type").value("CRM_SYNC"))
+                .andExpect(jsonPath("$.content[1].type").value("CRM_SYNC"));
+    }
+
+    @Test
+    void list_filtersByPriority() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(accessToken, JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .param("priority", "HIGH")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].priority").value("HIGH"));
+    }
+
+    @Test
+    void list_paginatesResults() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(accessToken, JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createJob(accessToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .param("page", "0")
+                        .param("size", "2")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.content.length()").value(2));
+    }
+
+    private void createJob(String accessToken, JobType type, JobPriority priority) throws Exception {
+        JobCreateRequest body = new JobCreateRequest(type, "{}", priority, null, null);
+        mockMvc.perform(post("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void create_withBlankPayload_returns400() throws Exception {
         seedUser("alice@example.com", "password");
         String accessToken = loginAndExtractAccess("alice@example.com", "password");
