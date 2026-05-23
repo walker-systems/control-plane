@@ -95,7 +95,7 @@ class AuthControllerIntegrationTest {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.get("accessToken").asText()).contains(".");
+        assertThat(body.get("accessToken").asString()).contains(".");
     }
 
     @Test
@@ -136,7 +136,7 @@ class AuthControllerIntegrationTest {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.get("refreshToken").asText()).isNotEqualTo(refreshToken);
+        assertThat(body.get("refreshToken").asString()).isNotEqualTo(refreshToken);
 
         mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -187,11 +187,11 @@ class AuthControllerIntegrationTest {
     }
 
     private String loginAndExtractRefresh(String email, String password) throws Exception {
-        return loginBody(email, password).get("refreshToken").asText();
+        return loginBody(email, password).get("refreshToken").asString();
     }
 
     private String loginAndExtractAccess(String email, String password) throws Exception {
-        return loginBody(email, password).get("accessToken").asText();
+        return loginBody(email, password).get("accessToken").asString();
     }
 
     private JsonNode loginBody(String email, String password) throws Exception {
