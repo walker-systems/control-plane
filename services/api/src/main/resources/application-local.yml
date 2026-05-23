@@ -6,3 +6,7 @@ logging:
 app:
   security:
     jwt-secret: local-dev-only-not-for-production-32b!
+  bootstrap:
+    enabled: true
+    admin-email: admin@control-plane.local
+    admin-password: change-me-on-first-login

@@ -97,10 +97,11 @@ erDiagram
     USERS ||--o{ REFRESH_TOKENS : owns
     USERS ||--o{ JOBS : owns
     USERS ||--o{ JOB_SCHEDULES : owns
-    USERS o|--o{ AUDIT_EVENTS : performs
-
-    JOB_SCHEDULES o|--o{ JOBS : generates
+    USERS |o--o{ AUDIT_EVENTS : performs
+    JOB_SCHEDULES |o--o{ JOBS : generates
     JOBS ||--o{ JOB_EXECUTIONS : has
+    
+    
 ```
 
 ## Notes

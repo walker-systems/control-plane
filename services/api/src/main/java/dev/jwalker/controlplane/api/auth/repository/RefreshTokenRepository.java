@@ -11,18 +11,18 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {
 
-    Optional<RefreshToken> findByTokenHash(String tokenHash);
+  Optional<RefreshToken> findByTokenHash(String tokenHash);
 
-    List<RefreshToken> findByUser(User user);
+  List<RefreshToken> findByUser(User user);
 
-    void deleteByUser(User user);
+  void deleteByUser(User user);
 
-    @Query("""
-    select count(rt)
-    from RefreshToken rt
-    where rt.user = :user
-      and rt.revokedAt is null
-      and rt.expiresAt > :now
-    """)
-    long countActiveTokensForUser(User user, OffsetDateTime now);
+  @Query("""
+  select count(rt)
+  from RefreshToken rt
+  where rt.user = :user
+    and rt.revokedAt is null
+    and rt.expiresAt > :now
+  """)
+  long countActiveTokensForUser(User user, OffsetDateTime now);
 }
