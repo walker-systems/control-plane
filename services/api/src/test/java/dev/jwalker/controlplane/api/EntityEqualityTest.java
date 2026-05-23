@@ -105,11 +105,12 @@ class EntityEqualityTest {
         return new JobSchedule(
                 id,
                 user(UUID.randomUUID()),
+                "schedule-" + UUID.randomUUID(),
                 JobType.CRM_SYNC,
                 "{}",
                 JobPriority.MEDIUM,
                 3,
-                "0 * * * *",
+                "0 0 * * * *",
                 "UTC"
         );
     }
