@@ -399,6 +399,103 @@ class JobControllerIntegrationTest {
                 .get("id").asString();
     }
 
+    @Test
+    void get_byNonOwnerUser_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+
+        String jobId = createJobAndReturnId(aliceToken);
+
+        mockMvc.perform(get("/api/jobs/" + jobId)
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_byOperator_returns200() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+
+        String jobId = createJobAndReturnId(aliceToken);
+
+        mockMvc.perform(get("/api/jobs/" + jobId)
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(jobId));
+    }
+
+    @Test
+    void list_byUser_returnsOnlyOwnJobs() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+
+        createJob(aliceToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(aliceToken, JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createJob(bobToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .header("Authorization", "Bearer " + aliceToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        mockMvc.perform(get("/api/jobs")
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void list_byOperator_returnsAllJobs() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+
+        createJob(aliceToken, JobType.CRM_SYNC, JobPriority.LOW);
+        createJob(bobToken, JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/jobs")
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void cancel_byNonOwnerUser_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+
+        String jobId = createJobAndReturnId(aliceToken);
+
+        mockMvc.perform(post("/api/jobs/" + jobId + "/cancel")
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void retry_byOperator_succeeds() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+
+        Job seeded = seedJob("alice@example.com", JobStatus.FAILED);
+
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/retry")
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
     private Job seedJob(String ownerEmail, JobStatus status) {
         User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
         Job job = new Job(null, owner, null, JobType.CRM_SYNC, "{}",
@@ -421,8 +518,12 @@ class JobControllerIntegrationTest {
     }
 
     private void seedUser(String email, String rawPassword) {
-        Role role = roleRepository.findByName("USER")
-                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, "USER")));
+        seedUserWithRole(email, rawPassword, "USER");
+    }
+
+    private void seedUserWithRole(String email, String rawPassword, String roleName) {
+        Role role = roleRepository.findByName(roleName)
+                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, roleName)));
         User user = new User(null, email, passwordEncoder.encode(rawPassword), UserStatus.ACTIVE);
         user.addRole(role);
         userRepository.saveAndFlush(user);

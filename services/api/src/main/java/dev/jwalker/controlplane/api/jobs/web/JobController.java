@@ -1,5 +1,6 @@
 package dev.jwalker.controlplane.api.jobs.web;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
@@ -49,8 +50,8 @@ public class JobController {
     }
 
     @GetMapping("/{id}")
-    public JobResponse get(@PathVariable UUID id) {
-        return jobService.findById(id)
+    public JobResponse get(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobService.findById(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
     }
 
@@ -61,19 +62,21 @@ public class JobController {
             @RequestParam(required = false) JobPriority priority,
             @RequestParam(required = false) UUID ownerId,
             @RequestParam(required = false) UUID sourceScheduleId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return jobService.search(status, type, priority, ownerId, sourceScheduleId, pageable);
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        return jobService.search(
+                status, type, priority, ownerId, sourceScheduleId, pageable, AuthenticatedCaller.from(jwt));
     }
 
     @PostMapping("/{id}/cancel")
-    public JobResponse cancel(@PathVariable UUID id) {
-        return jobService.cancel(id)
+    public JobResponse cancel(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobService.cancel(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
     }
 
     @PostMapping("/{id}/retry")
-    public JobResponse retry(@PathVariable UUID id) {
-        return jobService.retry(id)
+    public JobResponse retry(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobService.retry(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
     }
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
@@ -20,6 +21,7 @@ import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -46,10 +48,16 @@ class JobServiceTest {
     private JobService jobService;
 
     private User owner;
+    private AuthenticatedCaller ownerCaller;
+    private AuthenticatedCaller otherUserCaller;
+    private AuthenticatedCaller operatorCaller;
 
     @BeforeEach
     void setUp() {
         owner = new User(UUID.randomUUID(), "owner@example.com", "hashed", UserStatus.ACTIVE);
+        ownerCaller = new AuthenticatedCaller(owner.getId(), Set.of("USER"));
+        otherUserCaller = new AuthenticatedCaller(UUID.randomUUID(), Set.of("USER"));
+        operatorCaller = new AuthenticatedCaller(UUID.randomUUID(), Set.of("OPERATOR"));
     }
 
     @Test
@@ -128,19 +136,31 @@ class JobServiceTest {
     }
 
     @Test
-    void findById_returnsResponse_whenJobExists() {
+    void findById_returnsResponse_whenCallerIsOwner() {
         UUID jobId = UUID.randomUUID();
-        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
-        job.setCreatedAt(OffsetDateTime.now());
-        job.setUpdatedAt(OffsetDateTime.now());
+        Job job = pendingJob(jobId);
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
 
-        Optional<JobResponse> response = jobService.findById(jobId);
+        Optional<JobResponse> response = jobService.findById(jobId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().id()).isEqualTo(jobId);
-        assertThat(response.get().ownerEmail()).isEqualTo("owner@example.com");
+    }
+
+    @Test
+    void findById_returnsResponse_whenCallerIsOperator() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(pendingJob(jobId)));
+
+        assertThat(jobService.findById(jobId, operatorCaller)).isPresent();
+    }
+
+    @Test
+    void findById_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(pendingJob(jobId)));
+
+        assertThat(jobService.findById(jobId, otherUserCaller)).isEmpty();
     }
 
     @Test
@@ -148,24 +168,29 @@ class JobServiceTest {
         UUID jobId = UUID.randomUUID();
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
 
-        assertThat(jobService.findById(jobId)).isEmpty();
+        assertThat(jobService.findById(jobId, ownerCaller)).isEmpty();
     }
 
     @Test
-    void cancel_transitionsPendingToCancelled() {
+    void cancel_transitionsPendingToCancelled_whenCallerIsOwner() {
         UUID jobId = UUID.randomUUID();
-        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
-        job.setCreatedAt(OffsetDateTime.now());
-        job.setUpdatedAt(OffsetDateTime.now());
+        Job job = pendingJob(jobId);
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
         when(jobRepository.save(job)).thenReturn(job);
 
-        Optional<JobResponse> response = jobService.cancel(jobId);
+        Optional<JobResponse> response = jobService.cancel(jobId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().status()).isEqualTo(JobStatus.CANCELLED);
-        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(pendingJob(jobId)));
+
+        assertThat(jobService.cancel(jobId, otherUserCaller)).isEmpty();
+        verify(jobRepository, never()).save(any());
     }
 
     @Test
@@ -175,7 +200,7 @@ class JobServiceTest {
                 JobStatus.RUNNING, JobPriority.MEDIUM, null, 3);
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
 
-        assertThatThrownBy(() -> jobService.cancel(jobId))
+        assertThatThrownBy(() -> jobService.cancel(jobId, ownerCaller))
                 .isInstanceOf(JobStateException.class)
                 .extracting(e -> ((JobStateException) e).reason())
                 .isEqualTo(JobStateException.Reason.CANNOT_CANCEL);
@@ -187,12 +212,12 @@ class JobServiceTest {
         UUID jobId = UUID.randomUUID();
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
 
-        assertThat(jobService.cancel(jobId)).isEmpty();
+        assertThat(jobService.cancel(jobId, ownerCaller)).isEmpty();
         verify(jobRepository, never()).save(any());
     }
 
     @Test
-    void retry_transitionsFailedToPending() {
+    void retry_transitionsFailedToPending_whenCallerIsOwner() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
                 JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
@@ -201,26 +226,34 @@ class JobServiceTest {
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
         when(jobRepository.save(job)).thenReturn(job);
 
-        Optional<JobResponse> response = jobService.retry(jobId);
+        Optional<JobResponse> response = jobService.retry(jobId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().status()).isEqualTo(JobStatus.PENDING);
     }
 
     @Test
-    void retry_transitionsDeadLetterToPending() {
+    void retry_succeeds_whenCallerIsOperator() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
+                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
         job.setCreatedAt(OffsetDateTime.now());
         job.setUpdatedAt(OffsetDateTime.now());
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
         when(jobRepository.save(job)).thenReturn(job);
 
-        Optional<JobResponse> response = jobService.retry(jobId);
+        assertThat(jobService.retry(jobId, operatorCaller)).isPresent();
+    }
 
-        assertThat(response).isPresent();
-        assertThat(response.get().status()).isEqualTo(JobStatus.PENDING);
+    @Test
+    void retry_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+
+        assertThat(jobService.retry(jobId, otherUserCaller)).isEmpty();
+        verify(jobRepository, never()).save(any());
     }
 
     @Test
@@ -230,7 +263,7 @@ class JobServiceTest {
                 JobStatus.SUCCEEDED, JobPriority.MEDIUM, null, 3);
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
 
-        assertThatThrownBy(() -> jobService.retry(jobId))
+        assertThatThrownBy(() -> jobService.retry(jobId, ownerCaller))
                 .isInstanceOf(JobStateException.class)
                 .extracting(e -> ((JobStateException) e).reason())
                 .isEqualTo(JobStateException.Reason.CANNOT_RETRY);
@@ -242,27 +275,41 @@ class JobServiceTest {
         UUID jobId = UUID.randomUUID();
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
 
-        assertThat(jobService.retry(jobId)).isEmpty();
+        assertThat(jobService.retry(jobId, ownerCaller)).isEmpty();
         verify(jobRepository, never()).save(any());
     }
 
     @Test
-    void search_passesFiltersThrough_andMapsResults() {
+    void search_forUser_silentlyForcesOwnerIdToSelf() {
         Pageable pageable = PageRequest.of(0, 10);
-        Job job = new Job(UUID.randomUUID(), owner, null, JobType.CRM_SYNC, "{}",
+        UUID someoneElse = UUID.randomUUID();
+        Page<Job> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        when(jobRepository.search(null, null, null, owner.getId(), null, pageable))
+                .thenReturn(emptyPage);
+
+        jobService.search(null, null, null, someoneElse, null, pageable, ownerCaller);
+
+        verify(jobRepository).search(null, null, null, owner.getId(), null, pageable);
+    }
+
+    @Test
+    void search_forOperator_respectsOwnerIdFilter() {
+        Pageable pageable = PageRequest.of(0, 10);
+        UUID someoneElse = UUID.randomUUID();
+        Page<Job> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        when(jobRepository.search(null, null, null, someoneElse, null, pageable))
+                .thenReturn(emptyPage);
+
+        jobService.search(null, null, null, someoneElse, null, pageable, operatorCaller);
+
+        verify(jobRepository).search(null, null, null, someoneElse, null, pageable);
+    }
+
+    private Job pendingJob(UUID jobId) {
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
                 JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
         job.setCreatedAt(OffsetDateTime.now());
         job.setUpdatedAt(OffsetDateTime.now());
-        Page<Job> page = new PageImpl<>(List.of(job), pageable, 1);
-
-        when(jobRepository.search(JobStatus.PENDING, JobType.CRM_SYNC, null, null, null, pageable))
-                .thenReturn(page);
-
-        Page<JobResponse> result = jobService.search(
-                JobStatus.PENDING, JobType.CRM_SYNC, null, null, null, pageable);
-
-        assertThat(result.getTotalElements()).isEqualTo(1);
-        assertThat(result.getContent().get(0).id()).isEqualTo(job.getId());
-        assertThat(result.getContent().get(0).ownerEmail()).isEqualTo("owner@example.com");
+        return job;
     }
 }

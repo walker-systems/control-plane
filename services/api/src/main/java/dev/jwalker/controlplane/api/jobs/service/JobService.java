@@ -1,5 +1,6 @@
 package dev.jwalker.controlplane.api.jobs.service;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
@@ -48,8 +49,10 @@ public class JobService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<JobResponse> findById(UUID jobId) {
-        return jobRepository.findByIdWithRelations(jobId).map(JobResponse::from);
+    public Optional<JobResponse> findById(UUID jobId, AuthenticatedCaller caller) {
+        return jobRepository.findByIdWithRelations(jobId)
+                .filter(job -> canAccess(job, caller))
+                .map(JobResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -59,14 +62,17 @@ public class JobService {
             JobPriority priority,
             UUID ownerId,
             UUID sourceScheduleId,
-            Pageable pageable) {
-        return jobRepository.search(status, type, priority, ownerId, sourceScheduleId, pageable)
+            Pageable pageable,
+            AuthenticatedCaller caller) {
+        UUID effectiveOwnerId = caller.isPrivileged() ? ownerId : caller.userId();
+        return jobRepository.search(status, type, priority, effectiveOwnerId, sourceScheduleId, pageable)
                 .map(JobResponse::from);
     }
 
     @Transactional
-    public Optional<JobResponse> cancel(UUID jobId) {
-        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId);
+    public Optional<JobResponse> cancel(UUID jobId, AuthenticatedCaller caller) {
+        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId)
+                .filter(job -> canAccess(job, caller));
         if (jobOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -82,8 +88,9 @@ public class JobService {
     }
 
     @Transactional
-    public Optional<JobResponse> retry(UUID jobId) {
-        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId);
+    public Optional<JobResponse> retry(UUID jobId, AuthenticatedCaller caller) {
+        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId)
+                .filter(job -> canAccess(job, caller));
         if (jobOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -96,5 +103,9 @@ public class JobService {
         job.setStatus(JobStatus.PENDING);
         job.touch();
         return Optional.of(JobResponse.from(jobRepository.save(job)));
+    }
+
+    private static boolean canAccess(Job job, AuthenticatedCaller caller) {
+        return caller.isPrivileged() || job.getOwner().getId().equals(caller.userId());
     }
 }
