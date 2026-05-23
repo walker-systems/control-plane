@@ -63,4 +63,38 @@ public class JobService {
         return jobRepository.search(status, type, priority, ownerId, sourceScheduleId, pageable)
                 .map(JobResponse::from);
     }
+
+    @Transactional
+    public Optional<JobResponse> cancel(UUID jobId) {
+        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId);
+        if (jobOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Job job = jobOpt.get();
+        if (job.getStatus() != JobStatus.PENDING) {
+            throw new JobStateException(
+                    JobStateException.Reason.CANNOT_CANCEL,
+                    "Cannot cancel job in status " + job.getStatus());
+        }
+        job.setStatus(JobStatus.CANCELLED);
+        job.touch();
+        return Optional.of(JobResponse.from(jobRepository.save(job)));
+    }
+
+    @Transactional
+    public Optional<JobResponse> retry(UUID jobId) {
+        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId);
+        if (jobOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Job job = jobOpt.get();
+        if (job.getStatus() != JobStatus.FAILED && job.getStatus() != JobStatus.DEAD_LETTER) {
+            throw new JobStateException(
+                    JobStateException.Reason.CANNOT_RETRY,
+                    "Cannot retry job in status " + job.getStatus());
+        }
+        job.setStatus(JobStatus.PENDING);
+        job.touch();
+        return Optional.of(JobResponse.from(jobRepository.save(job)));
+    }
 }

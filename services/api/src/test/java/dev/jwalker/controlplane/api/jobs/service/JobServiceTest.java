@@ -152,6 +152,101 @@ class JobServiceTest {
     }
 
     @Test
+    void cancel_transitionsPendingToCancelled() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.PENDING, JobPriority.MEDIUM, null, 3);
+        job.setCreatedAt(OffsetDateTime.now());
+        job.setUpdatedAt(OffsetDateTime.now());
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.save(job)).thenReturn(job);
+
+        Optional<JobResponse> response = jobService.cancel(jobId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().status()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_throwsJobStateException_whenJobIsRunning() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.RUNNING, JobPriority.MEDIUM, null, 3);
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+
+        assertThatThrownBy(() -> jobService.cancel(jobId))
+                .isInstanceOf(JobStateException.class)
+                .extracting(e -> ((JobStateException) e).reason())
+                .isEqualTo(JobStateException.Reason.CANNOT_CANCEL);
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    void cancel_returnsEmpty_whenJobMissing() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
+
+        assertThat(jobService.cancel(jobId)).isEmpty();
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    void retry_transitionsFailedToPending() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
+        job.setCreatedAt(OffsetDateTime.now());
+        job.setUpdatedAt(OffsetDateTime.now());
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.save(job)).thenReturn(job);
+
+        Optional<JobResponse> response = jobService.retry(jobId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().status()).isEqualTo(JobStatus.PENDING);
+    }
+
+    @Test
+    void retry_transitionsDeadLetterToPending() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
+        job.setCreatedAt(OffsetDateTime.now());
+        job.setUpdatedAt(OffsetDateTime.now());
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.save(job)).thenReturn(job);
+
+        Optional<JobResponse> response = jobService.retry(jobId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().status()).isEqualTo(JobStatus.PENDING);
+    }
+
+    @Test
+    void retry_throwsJobStateException_whenJobIsSucceeded() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.SUCCEEDED, JobPriority.MEDIUM, null, 3);
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+
+        assertThatThrownBy(() -> jobService.retry(jobId))
+                .isInstanceOf(JobStateException.class)
+                .extracting(e -> ((JobStateException) e).reason())
+                .isEqualTo(JobStateException.Reason.CANNOT_RETRY);
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    void retry_returnsEmpty_whenJobMissing() {
+        UUID jobId = UUID.randomUUID();
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
+
+        assertThat(jobService.retry(jobId)).isEmpty();
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
     void search_passesFiltersThrough_andMapsResults() {
         Pageable pageable = PageRequest.of(0, 10);
         Job job = new Job(UUID.randomUUID(), owner, null, JobType.CRM_SYNC, "{}",

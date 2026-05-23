@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.jwalker.controlplane.api.auth.web.dto.LoginRequest;
+import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
@@ -298,6 +299,111 @@ class JobControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void cancel_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/api/jobs/" + UUID.randomUUID() + "/cancel"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void cancel_pendingJob_returnsCancelledJob() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String jobId = createJobAndReturnId(accessToken);
+
+        mockMvc.perform(post("/api/jobs/" + jobId + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(jobId))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void cancel_nonExistentJob_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(post("/api/jobs/" + UUID.randomUUID() + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void cancel_alreadyCancelledJob_returns409() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String jobId = createJobAndReturnId(accessToken);
+
+        mockMvc.perform(post("/api/jobs/" + jobId + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/jobs/" + jobId + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reason").value("CANNOT_CANCEL"));
+    }
+
+    @Test
+    void retry_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/api/jobs/" + UUID.randomUUID() + "/retry"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void retry_failedJob_returnsPendingJob() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        Job seeded = seedJob("alice@example.com", JobStatus.FAILED);
+
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/retry")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(seeded.getId().toString()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void retry_pendingJob_returns409() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String jobId = createJobAndReturnId(accessToken);
+
+        mockMvc.perform(post("/api/jobs/" + jobId + "/retry")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reason").value("CANNOT_RETRY"));
+    }
+
+    @Test
+    void retry_nonExistentJob_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(post("/api/jobs/" + UUID.randomUUID() + "/retry")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    private String createJobAndReturnId(String accessToken) throws Exception {
+        JobCreateRequest body = new JobCreateRequest(JobType.CRM_SYNC, "{}", null, null, null);
+        MvcResult result = mockMvc.perform(post("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("id").asString();
+    }
+
+    private Job seedJob(String ownerEmail, JobStatus status) {
+        User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
+        Job job = new Job(null, owner, null, JobType.CRM_SYNC, "{}",
+                status, JobPriority.MEDIUM, null, 3);
+        return jobRepository.saveAndFlush(job);
     }
 
     @Test
