@@ -2,6 +2,7 @@ package dev.jwalker.controlplane.api.schedules.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -17,6 +18,7 @@ import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.RoleRepository;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -201,6 +203,60 @@ class JobScheduleControllerIntegrationTest {
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(bodyJson))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void get_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/schedules/" + UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void get_withValidToken_returnsSchedule() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobScheduleCreateRequest body = new JobScheduleCreateRequest(
+                "My Sync", JobType.CRM_SYNC, "{}", JobPriority.HIGH, 5,
+                "0 0 0 * * *", "UTC");
+
+        MvcResult created = mockMvc.perform(post("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String scheduleId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asString();
+
+        mockMvc.perform(get("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(scheduleId))
+                .andExpect(jsonPath("$.name").value("My Sync"))
+                .andExpect(jsonPath("$.ownerEmail").value("alice@example.com"))
+                .andExpect(jsonPath("$.priority").value("HIGH"))
+                .andExpect(jsonPath("$.enabled").value(true));
+    }
+
+    @Test
+    void get_whenScheduleMissing_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/schedules/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_withMalformedId_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/schedules/not-a-uuid")
+                        .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isBadRequest());
     }
 

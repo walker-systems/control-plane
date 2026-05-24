@@ -141,6 +141,32 @@ class JobScheduleServiceTest {
     }
 
     @Test
+    void findById_returnsResponse_whenScheduleExists() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule schedule = new JobSchedule(
+                scheduleId, owner, "Test", JobType.CRM_SYNC, "{}",
+                JobPriority.MEDIUM, 3, "0 0 * * * *", "UTC");
+        schedule.setCreatedAt(OffsetDateTime.now());
+        schedule.setUpdatedAt(OffsetDateTime.now());
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(schedule));
+
+        Optional<JobScheduleResponse> response = jobScheduleService.findById(scheduleId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().id()).isEqualTo(scheduleId);
+        assertThat(response.get().name()).isEqualTo("Test");
+        assertThat(response.get().ownerEmail()).isEqualTo("owner@example.com");
+    }
+
+    @Test
+    void findById_returnsEmpty_whenScheduleMissing() {
+        UUID scheduleId = UUID.randomUUID();
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
+
+        assertThat(jobScheduleService.findById(scheduleId)).isEmpty();
+    }
+
+    @Test
     void create_throws_whenAuthenticatedUserNotFound() {
         UUID missing = UUID.randomUUID();
         when(userRepository.findById(missing)).thenReturn(Optional.empty());

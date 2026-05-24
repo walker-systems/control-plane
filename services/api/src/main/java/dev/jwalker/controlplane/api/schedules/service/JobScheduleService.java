@@ -12,6 +12,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.Temporal;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -78,6 +79,11 @@ public class JobScheduleService {
                     InvalidScheduleConfigException.Reason.INVALID_TIMEZONE,
                     "Invalid timezone: " + timezone);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<JobScheduleResponse> findById(UUID scheduleId) {
+        return jobScheduleRepository.findByIdWithOwner(scheduleId).map(JobScheduleResponse::from);
     }
 
     static OffsetDateTime computeNextRunAt(CronExpression cron, ZoneId zone) {
