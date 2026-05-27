@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import dev.jwalker.controlplane.api.auth.web.dto.LoginRequest;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
+import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
 import dev.jwalker.controlplane.api.users.model.Role;
@@ -258,6 +259,107 @@ class JobScheduleControllerIntegrationTest {
         mockMvc.perform(get("/api/schedules/not-a-uuid")
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void list_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/schedules"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void list_returnsEmptyPage_whenNoSchedules() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void list_returnsAllSchedules_byDefault() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createSchedule(accessToken, "Sync 1", JobType.CRM_SYNC, JobPriority.LOW);
+        createSchedule(accessToken, "Export 1", JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createSchedule(accessToken, "Sync 2", JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3));
+    }
+
+    @Test
+    void list_filtersByType() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createSchedule(accessToken, "Sync 1", JobType.CRM_SYNC, JobPriority.LOW);
+        createSchedule(accessToken, "Export 1", JobType.CUSTOMER_EXPORT, JobPriority.HIGH);
+        createSchedule(accessToken, "Sync 2", JobType.CRM_SYNC, JobPriority.MEDIUM);
+
+        mockMvc.perform(get("/api/schedules")
+                        .param("type", "CRM_SYNC")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].type").value("CRM_SYNC"))
+                .andExpect(jsonPath("$.content[1].type").value("CRM_SYNC"));
+    }
+
+    @Test
+    void list_filtersByEnabled() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createSchedule(accessToken, "Enabled One", JobType.CRM_SYNC, JobPriority.LOW);
+        seedDisabledSchedule("alice@example.com", "Disabled One");
+
+        mockMvc.perform(get("/api/schedules")
+                        .param("enabled", "false")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Disabled One"))
+                .andExpect(jsonPath("$.content[0].enabled").value(false));
+    }
+
+    @Test
+    void list_paginatesResults() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createSchedule(accessToken, "S1", JobType.CRM_SYNC, JobPriority.LOW);
+        createSchedule(accessToken, "S2", JobType.CRM_SYNC, JobPriority.MEDIUM);
+        createSchedule(accessToken, "S3", JobType.CRM_SYNC, JobPriority.HIGH);
+
+        mockMvc.perform(get("/api/schedules")
+                        .param("page", "0")
+                        .param("size", "2")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.content.length()").value(2));
+    }
+
+    private void createSchedule(String accessToken, String name, JobType type, JobPriority priority) throws Exception {
+        JobScheduleCreateRequest body = new JobScheduleCreateRequest(
+                name, type, "{}", priority, null, "0 0 * * * *", "UTC");
+        mockMvc.perform(post("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated());
+    }
+
+    private JobSchedule seedDisabledSchedule(String ownerEmail, String name) {
+        User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
+        JobSchedule s = new JobSchedule(null, owner, name, JobType.CRM_SYNC, "{}",
+                JobPriority.MEDIUM, 3, "0 0 * * * *", "UTC");
+        s.setEnabled(false);
+        return jobScheduleRepository.saveAndFlush(s);
     }
 
     private void seedUser(String email, String rawPassword) {

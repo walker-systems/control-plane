@@ -17,8 +17,13 @@ import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -164,6 +169,27 @@ class JobScheduleServiceTest {
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
 
         assertThat(jobScheduleService.findById(scheduleId)).isEmpty();
+    }
+
+    @Test
+    void search_passesFiltersThrough_andMapsResults() {
+        Pageable pageable = PageRequest.of(0, 10);
+        JobSchedule schedule = new JobSchedule(
+                UUID.randomUUID(), owner, "Daily Sync", JobType.CRM_SYNC, "{}",
+                JobPriority.MEDIUM, 3, "0 0 * * * *", "UTC");
+        schedule.setCreatedAt(OffsetDateTime.now());
+        schedule.setUpdatedAt(OffsetDateTime.now());
+        Page<JobSchedule> page = new PageImpl<>(List.of(schedule), pageable, 1);
+
+        when(jobScheduleRepository.search(true, JobType.CRM_SYNC, null, null, pageable))
+                .thenReturn(page);
+
+        Page<JobScheduleResponse> result = jobScheduleService.search(
+                true, JobType.CRM_SYNC, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).name()).isEqualTo("Daily Sync");
+        assertThat(result.getContent().get(0).ownerEmail()).isEqualTo("owner@example.com");
     }
 
     @Test

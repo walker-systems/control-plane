@@ -1,6 +1,7 @@
 package dev.jwalker.controlplane.api.schedules.service;
 
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
+import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
@@ -16,6 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -84,6 +87,17 @@ public class JobScheduleService {
     @Transactional(readOnly = true)
     public Optional<JobScheduleResponse> findById(UUID scheduleId) {
         return jobScheduleRepository.findByIdWithOwner(scheduleId).map(JobScheduleResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<JobScheduleResponse> search(
+            Boolean enabled,
+            JobType type,
+            JobPriority priority,
+            UUID ownerId,
+            Pageable pageable) {
+        return jobScheduleRepository.search(enabled, type, priority, ownerId, pageable)
+                .map(JobScheduleResponse::from);
     }
 
     static OffsetDateTime computeNextRunAt(CronExpression cron, ZoneId zone) {

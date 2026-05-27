@@ -1,5 +1,7 @@
 package dev.jwalker.controlplane.api.schedules.web;
 
+import dev.jwalker.controlplane.api.jobs.model.JobPriority;
+import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.service.InvalidScheduleConfigException;
 import dev.jwalker.controlplane.api.schedules.service.JobScheduleService;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
@@ -8,6 +10,10 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -44,6 +51,16 @@ public class JobScheduleController {
     public JobScheduleResponse get(@PathVariable UUID id) {
         return jobScheduleService.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    }
+
+    @GetMapping
+    public Page<JobScheduleResponse> list(
+            @RequestParam(required = false) Boolean enabled,
+            @RequestParam(required = false) JobType type,
+            @RequestParam(required = false) JobPriority priority,
+            @RequestParam(required = false) UUID ownerId,
+            @PageableDefault(size = 20, sort = "nextRunAt", direction = Sort.Direction.ASC) Pageable pageable) {
+        return jobScheduleService.search(enabled, type, priority, ownerId, pageable);
     }
 
     @ExceptionHandler(InvalidScheduleConfigException.class)
