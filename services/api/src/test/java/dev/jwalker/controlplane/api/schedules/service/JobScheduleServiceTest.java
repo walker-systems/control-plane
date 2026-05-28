@@ -172,6 +172,99 @@ class JobScheduleServiceTest {
     }
 
     @Test
+    void pause_disablesSchedule_andClearsNextRunAt() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        s.setNextRunAt(OffsetDateTime.now().plusHours(1));
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.save(s)).thenReturn(s);
+
+        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().enabled()).isFalse();
+        assertThat(response.get().nextRunAt()).isNull();
+        assertThat(s.isEnabled()).isFalse();
+        assertThat(s.getNextRunAt()).isNull();
+    }
+
+    @Test
+    void pause_isIdempotent_whenAlreadyDisabled() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        s.disable();
+        s.setNextRunAt(null);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().enabled()).isFalse();
+        verify(jobScheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void pause_returnsEmpty_whenScheduleMissing() {
+        UUID scheduleId = UUID.randomUUID();
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
+
+        assertThat(jobScheduleService.pause(scheduleId)).isEmpty();
+        verify(jobScheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void resume_enablesSchedule_andComputesNextRunAt() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        s.disable();
+        s.setNextRunAt(null);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.save(s)).thenReturn(s);
+
+        OffsetDateTime before = OffsetDateTime.now();
+        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().enabled()).isTrue();
+        assertThat(response.get().nextRunAt()).isNotNull();
+        assertThat(response.get().nextRunAt()).isAfter(before);
+    }
+
+    @Test
+    void resume_isIdempotent_whenAlreadyEnabled() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        OffsetDateTime originalNextRun = OffsetDateTime.now().plusHours(5);
+        s.setNextRunAt(originalNextRun);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId);
+
+        assertThat(response).isPresent();
+        assertThat(response.get().enabled()).isTrue();
+        assertThat(response.get().nextRunAt()).isEqualTo(originalNextRun);
+        verify(jobScheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void resume_returnsEmpty_whenScheduleMissing() {
+        UUID scheduleId = UUID.randomUUID();
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
+
+        assertThat(jobScheduleService.resume(scheduleId)).isEmpty();
+        verify(jobScheduleRepository, never()).save(any());
+    }
+
+    private JobSchedule enabledSchedule(UUID id) {
+        JobSchedule s = new JobSchedule(
+                id, owner, "Test", JobType.CRM_SYNC, "{}",
+                JobPriority.MEDIUM, 3, "0 0 * * * *", "UTC");
+        s.setCreatedAt(OffsetDateTime.now());
+        s.setUpdatedAt(OffsetDateTime.now());
+        return s;
+    }
+
+    @Test
     void search_passesFiltersThrough_andMapsResults() {
         Pageable pageable = PageRequest.of(0, 10);
         JobSchedule schedule = new JobSchedule(

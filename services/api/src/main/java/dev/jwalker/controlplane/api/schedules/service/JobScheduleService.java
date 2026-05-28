@@ -100,6 +100,38 @@ public class JobScheduleService {
                 .map(JobScheduleResponse::from);
     }
 
+    @Transactional
+    public Optional<JobScheduleResponse> pause(UUID scheduleId) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+        if (opt.isEmpty()) {
+            return Optional.empty();
+        }
+        JobSchedule s = opt.get();
+        if (s.isEnabled()) {
+            s.disable();
+            s.setNextRunAt(null);
+            jobScheduleRepository.save(s);
+        }
+        return Optional.of(JobScheduleResponse.from(s));
+    }
+
+    @Transactional
+    public Optional<JobScheduleResponse> resume(UUID scheduleId) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+        if (opt.isEmpty()) {
+            return Optional.empty();
+        }
+        JobSchedule s = opt.get();
+        if (!s.isEnabled()) {
+            CronExpression cron = parseCron(s.getCronExpression());
+            ZoneId zone = parseTimezone(s.getTimezone());
+            s.enable();
+            s.setNextRunAt(computeNextRunAt(cron, zone));
+            jobScheduleRepository.save(s);
+        }
+        return Optional.of(JobScheduleResponse.from(s));
+    }
+
     static OffsetDateTime computeNextRunAt(CronExpression cron, ZoneId zone) {
         ZonedDateTime now = ZonedDateTime.now(zone);
         Temporal next = cron.next(now);

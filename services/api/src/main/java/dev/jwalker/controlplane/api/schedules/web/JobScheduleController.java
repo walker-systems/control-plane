@@ -63,6 +63,18 @@ public class JobScheduleController {
         return jobScheduleService.search(enabled, type, priority, ownerId, pageable);
     }
 
+    @PostMapping("/{id}/pause")
+    public JobScheduleResponse pause(@PathVariable UUID id) {
+        return jobScheduleService.pause(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    }
+
+    @PostMapping("/{id}/resume")
+    public JobScheduleResponse resume(@PathVariable UUID id) {
+        return jobScheduleService.resume(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    }
+
     @ExceptionHandler(InvalidScheduleConfigException.class)
     ProblemDetail handleScheduleConfig(InvalidScheduleConfigException e) {
         HttpStatus status = switch (e.reason()) {

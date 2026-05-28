@@ -344,6 +344,103 @@ class JobScheduleControllerIntegrationTest {
                 .andExpect(jsonPath("$.content.length()").value(2));
     }
 
+    @Test
+    void pause_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/api/schedules/" + UUID.randomUUID() + "/pause"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void pause_enabledSchedule_returnsDisabledSchedule() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "Sync 1");
+
+        mockMvc.perform(post("/api/schedules/" + scheduleId + "/pause")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(scheduleId))
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.nextRunAt").doesNotExist());
+    }
+
+    @Test
+    void pause_alreadyDisabledSchedule_isIdempotent() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        JobSchedule seeded = seedDisabledSchedule("alice@example.com", "Already Off");
+
+        mockMvc.perform(post("/api/schedules/" + seeded.getId() + "/pause")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
+    }
+
+    @Test
+    void pause_missingSchedule_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(post("/api/schedules/" + UUID.randomUUID() + "/pause")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void resume_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/api/schedules/" + UUID.randomUUID() + "/resume"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void resume_disabledSchedule_returnsEnabledScheduleWithNextRunAt() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        JobSchedule seeded = seedDisabledSchedule("alice@example.com", "Resume Me");
+
+        mockMvc.perform(post("/api/schedules/" + seeded.getId() + "/resume")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(seeded.getId().toString()))
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.nextRunAt").isNotEmpty());
+    }
+
+    @Test
+    void resume_alreadyEnabledSchedule_isIdempotent() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "Already On");
+
+        mockMvc.perform(post("/api/schedules/" + scheduleId + "/resume")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true));
+    }
+
+    @Test
+    void resume_missingSchedule_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(post("/api/schedules/" + UUID.randomUUID() + "/resume")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    private String createScheduleAndReturnId(String accessToken, String name) throws Exception {
+        JobScheduleCreateRequest body = new JobScheduleCreateRequest(
+                name, JobType.CRM_SYNC, "{}", null, null, "0 0 * * * *", "UTC");
+        MvcResult result = mockMvc.perform(post("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("id").asString();
+    }
+
     private void createSchedule(String accessToken, String name, JobType type, JobPriority priority) throws Exception {
         JobScheduleCreateRequest body = new JobScheduleCreateRequest(
                 name, type, "{}", priority, null, "0 0 * * * *", "UTC");
