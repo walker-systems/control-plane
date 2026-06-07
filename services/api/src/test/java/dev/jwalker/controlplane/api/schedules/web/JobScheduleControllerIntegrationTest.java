@@ -2,8 +2,10 @@ package dev.jwalker.controlplane.api.schedules.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,6 +16,7 @@ import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
+import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleUpdateRequest;
 import dev.jwalker.controlplane.api.users.model.Role;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
@@ -26,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -66,16 +70,19 @@ class JobScheduleControllerIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        // deleteAllInBatch issues a bulk DELETE that bypasses @SQLDelete,
-        // hard-deleting rows so the user delete that follows is not blocked
-        // by FK references to soft-deleted schedules.
-        jobScheduleRepository.deleteAllInBatch();
+        // Raw SQL bypasses both @SQLDelete and @SQLRestriction so
+        // soft-deleted rows from prior tests don't block the user delete
+        // that follows via the schedules->users FK.
+        jdbcTemplate.execute("DELETE FROM job_schedules");
         userRepository.deleteAll();
 
         mockMvc = MockMvcBuilders
@@ -424,6 +431,131 @@ class JobScheduleControllerIntegrationTest {
         String accessToken = loginAndExtractAccess("alice@example.com", "password");
 
         mockMvc.perform(post("/api/schedules/" + UUID.randomUUID() + "/resume")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void update_withoutToken_returns401() throws Exception {
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                "Anything", null, null, null, null, null);
+        mockMvc.perform(put("/api/schedules/" + UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void update_withPartialUpdate_returnsUpdatedSchedule() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "Original");
+
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                "Renamed", null, JobPriority.HIGH, null, null, null);
+
+        mockMvc.perform(put("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(scheduleId))
+                .andExpect(jsonPath("$.name").value("Renamed"))
+                .andExpect(jsonPath("$.priority").value("HIGH"));
+    }
+
+    @Test
+    void update_withInvalidCron_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "Sched");
+
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                null, null, null, null, "not-a-cron", null);
+
+        mockMvc.perform(put("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.reason").value("INVALID_CRON"));
+    }
+
+    @Test
+    void update_withDuplicateName_returns409() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        createScheduleAndReturnId(accessToken, "Existing");
+        String scheduleId = createScheduleAndReturnId(accessToken, "ToRename");
+
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                "Existing", null, null, null, null, null);
+
+        mockMvc.perform(put("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reason").value("DUPLICATE_NAME"));
+    }
+
+    @Test
+    void update_missingSchedule_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                "Nope", null, null, null, null, null);
+
+        mockMvc.perform(put("/api/schedules/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void delete_withoutToken_returns401() throws Exception {
+        mockMvc.perform(delete("/api/schedules/" + UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void delete_existingSchedule_returns204_andHidesFromGet() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "ToDelete");
+
+        mockMvc.perform(delete("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void delete_thenRecreateWithSameName_succeeds() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(accessToken, "Reusable Name");
+
+        mockMvc.perform(delete("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
+
+        // Partial unique index excludes the soft-deleted row, so reuse is fine.
+        String newId = createScheduleAndReturnId(accessToken, "Reusable Name");
+        assertThat(newId).isNotEqualTo(scheduleId);
+    }
+
+    @Test
+    void delete_missingSchedule_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(delete("/api/schedules/" + UUID.randomUUID())
                         .header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isNotFound());
     }

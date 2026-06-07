@@ -6,6 +6,7 @@ import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleResponse;
+import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleUpdateRequest;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.DateTimeException;
@@ -113,6 +114,65 @@ public class JobScheduleService {
             jobScheduleRepository.save(s);
         }
         return Optional.of(JobScheduleResponse.from(s));
+    }
+
+    @Transactional
+    public Optional<JobScheduleResponse> update(UUID scheduleId, JobScheduleUpdateRequest request) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+        if (opt.isEmpty()) {
+            return Optional.empty();
+        }
+        JobSchedule s = opt.get();
+
+        CronExpression parsedCron = null;
+        ZoneId parsedZone = null;
+
+        if (request.name() != null) {
+            s.setName(request.name());
+        }
+        if (request.payloadJson() != null) {
+            s.setPayloadJson(request.payloadJson());
+        }
+        if (request.priority() != null) {
+            s.setPriority(request.priority());
+        }
+        if (request.maxRetries() != null) {
+            s.setMaxRetries(request.maxRetries());
+        }
+        if (request.cron() != null) {
+            parsedCron = parseCron(request.cron());
+            s.setCronExpression(request.cron());
+        }
+        if (request.timezone() != null) {
+            parsedZone = parseTimezone(request.timezone());
+            s.setTimezone(request.timezone());
+        }
+
+        if ((parsedCron != null || parsedZone != null) && s.isEnabled()) {
+            CronExpression cron = parsedCron != null ? parsedCron : parseCron(s.getCronExpression());
+            ZoneId zone = parsedZone != null ? parsedZone : parseTimezone(s.getTimezone());
+            s.setNextRunAt(computeNextRunAt(cron, zone));
+        }
+
+        s.touch();
+
+        try {
+            return Optional.of(JobScheduleResponse.from(jobScheduleRepository.saveAndFlush(s)));
+        } catch (DataIntegrityViolationException e) {
+            throw new InvalidScheduleConfigException(
+                    InvalidScheduleConfigException.Reason.DUPLICATE_NAME,
+                    "A schedule named '" + s.getName() + "' already exists for this owner");
+        }
+    }
+
+    @Transactional
+    public boolean delete(UUID scheduleId) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+        if (opt.isEmpty()) {
+            return false;
+        }
+        jobScheduleRepository.delete(opt.get());
+        return true;
     }
 
     @Transactional

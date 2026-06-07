@@ -6,6 +6,7 @@ import dev.jwalker.controlplane.api.schedules.service.InvalidScheduleConfigExcep
 import dev.jwalker.controlplane.api.schedules.service.JobScheduleService;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleResponse;
+import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleUpdateRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -19,13 +20,16 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -73,6 +77,22 @@ public class JobScheduleController {
     public JobScheduleResponse resume(@PathVariable UUID id) {
         return jobScheduleService.resume(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    }
+
+    @PutMapping("/{id}")
+    public JobScheduleResponse update(
+            @PathVariable UUID id,
+            @Valid @RequestBody JobScheduleUpdateRequest request) {
+        return jobScheduleService.update(id, request)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        if (!jobScheduleService.delete(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found");
+        }
     }
 
     @ExceptionHandler(InvalidScheduleConfigException.class)

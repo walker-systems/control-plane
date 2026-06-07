@@ -13,6 +13,7 @@ import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleCreateRequest;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleResponse;
+import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleUpdateRequest;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
@@ -253,6 +254,130 @@ class JobScheduleServiceTest {
 
         assertThat(jobScheduleService.resume(scheduleId)).isEmpty();
         verify(jobScheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void update_updatesOnlyProvidedFields() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        s.setName("Original");
+        s.setPriority(JobPriority.LOW);
+        s.setMaxRetries(3);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.saveAndFlush(s)).thenReturn(s);
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                "Renamed", null, JobPriority.HIGH, null, null, null);
+
+        Optional<JobScheduleResponse> response = jobScheduleService.update(scheduleId, request);
+
+        assertThat(response).isPresent();
+        assertThat(s.getName()).isEqualTo("Renamed");
+        assertThat(s.getPriority()).isEqualTo(JobPriority.HIGH);
+        assertThat(s.getMaxRetries()).isEqualTo(3); // unchanged
+    }
+
+    @Test
+    void update_recomputesNextRunAt_whenCronChangedAndEnabled() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        OffsetDateTime original = OffsetDateTime.now().minusHours(1);
+        s.setNextRunAt(original);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.saveAndFlush(s)).thenReturn(s);
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                null, null, null, null, "0 0 12 * * *", null);
+
+        OffsetDateTime before = OffsetDateTime.now();
+        jobScheduleService.update(scheduleId, request);
+
+        assertThat(s.getCronExpression()).isEqualTo("0 0 12 * * *");
+        assertThat(s.getNextRunAt()).isAfter(before);
+    }
+
+    @Test
+    void update_doesNotRecomputeNextRunAt_whenDisabled() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        s.disable();
+        s.setNextRunAt(null);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.saveAndFlush(s)).thenReturn(s);
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                null, null, null, null, "0 0 12 * * *", null);
+
+        jobScheduleService.update(scheduleId, request);
+
+        assertThat(s.getCronExpression()).isEqualTo("0 0 12 * * *");
+        assertThat(s.getNextRunAt()).isNull();
+    }
+
+    @Test
+    void update_throwsInvalidCron_whenMalformed() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                null, null, null, null, "not-a-cron", null);
+
+        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request))
+                .isInstanceOf(InvalidScheduleConfigException.class)
+                .extracting(e -> ((InvalidScheduleConfigException) e).reason())
+                .isEqualTo(InvalidScheduleConfigException.Reason.INVALID_CRON);
+        verify(jobScheduleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_throwsDuplicateName_onUniqueViolation() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+        when(jobScheduleRepository.saveAndFlush(any(JobSchedule.class)))
+                .thenThrow(new DataIntegrityViolationException("unique constraint"));
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                "Taken Name", null, null, null, null, null);
+
+        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request))
+                .isInstanceOf(InvalidScheduleConfigException.class)
+                .extracting(e -> ((InvalidScheduleConfigException) e).reason())
+                .isEqualTo(InvalidScheduleConfigException.Reason.DUPLICATE_NAME);
+    }
+
+    @Test
+    void update_returnsEmpty_whenScheduleMissing() {
+        UUID scheduleId = UUID.randomUUID();
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                "Anything", null, null, null, null, null);
+
+        assertThat(jobScheduleService.update(scheduleId, request)).isEmpty();
+        verify(jobScheduleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void delete_softDeletesSchedule_whenPresent() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        boolean result = jobScheduleService.delete(scheduleId);
+
+        assertThat(result).isTrue();
+        verify(jobScheduleRepository).delete(s);
+    }
+
+    @Test
+    void delete_returnsFalse_whenScheduleMissing() {
+        UUID scheduleId = UUID.randomUUID();
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
+
+        assertThat(jobScheduleService.delete(scheduleId)).isFalse();
+        verify(jobScheduleRepository, never()).delete(any(JobSchedule.class));
     }
 
     private JobSchedule enabledSchedule(UUID id) {
