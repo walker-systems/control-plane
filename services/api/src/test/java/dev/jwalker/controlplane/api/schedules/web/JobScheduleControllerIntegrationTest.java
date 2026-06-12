@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -439,7 +439,7 @@ class JobScheduleControllerIntegrationTest {
     void update_withoutToken_returns401() throws Exception {
         JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
                 "Anything", null, null, null, null, null);
-        mockMvc.perform(put("/api/schedules/" + UUID.randomUUID())
+        mockMvc.perform(patch("/api/schedules/" + UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isUnauthorized());
@@ -454,7 +454,7 @@ class JobScheduleControllerIntegrationTest {
         JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
                 "Renamed", null, JobPriority.HIGH, null, null, null);
 
-        mockMvc.perform(put("/api/schedules/" + scheduleId)
+        mockMvc.perform(patch("/api/schedules/" + scheduleId)
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -473,7 +473,7 @@ class JobScheduleControllerIntegrationTest {
         JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
                 null, null, null, null, "not-a-cron", null);
 
-        mockMvc.perform(put("/api/schedules/" + scheduleId)
+        mockMvc.perform(patch("/api/schedules/" + scheduleId)
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -491,7 +491,7 @@ class JobScheduleControllerIntegrationTest {
         JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
                 "Existing", null, null, null, null, null);
 
-        mockMvc.perform(put("/api/schedules/" + scheduleId)
+        mockMvc.perform(patch("/api/schedules/" + scheduleId)
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -507,7 +507,7 @@ class JobScheduleControllerIntegrationTest {
         JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
                 "Nope", null, null, null, null, null);
 
-        mockMvc.perform(put("/api/schedules/" + UUID.randomUUID())
+        mockMvc.perform(patch("/api/schedules/" + UUID.randomUUID())
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
