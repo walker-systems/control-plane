@@ -79,6 +79,11 @@ public class JobScheduleController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
+    // PATCH (not PUT) because the body is partial — null fields mean
+    // "don't touch." PUT would imply full replacement, which
+    // would be misleading. Returns the updated schedule (200) or 404 if
+    // missing; 400 on bad cron/timezone and 409 on duplicate name flow
+    // through the InvalidScheduleConfigException handler below.
     @PatchMapping("/{id}")
     public JobScheduleResponse update(
             @PathVariable UUID id,
@@ -87,6 +92,10 @@ public class JobScheduleController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
+    // Soft delete behind the scenes (see JobSchedule's @SQLDelete). Returns
+    // 204 No Content on success because the resource is gone — no body
+    // to send. 404 if the id doesn't match an active schedule (already
+    // soft-deleted ones are invisible to the service's lookup).
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {

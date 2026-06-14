@@ -257,12 +257,14 @@ class JobScheduleServiceTest {
     }
 
     @Test
-    void update_updatesOnlyProvidedFields() {
+    void update_updatesOnlyProvidedFields_andTouchesUpdatedAt() {
         UUID scheduleId = UUID.randomUUID();
         JobSchedule s = enabledSchedule(scheduleId);
         s.setName("Original");
         s.setPriority(JobPriority.LOW);
         s.setMaxRetries(3);
+        OffsetDateTime staleUpdatedAt = OffsetDateTime.now().minusHours(1);
+        s.setUpdatedAt(staleUpdatedAt);
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
         when(jobScheduleRepository.saveAndFlush(s)).thenReturn(s);
 
@@ -275,6 +277,7 @@ class JobScheduleServiceTest {
         assertThat(s.getName()).isEqualTo("Renamed");
         assertThat(s.getPriority()).isEqualTo(JobPriority.HIGH);
         assertThat(s.getMaxRetries()).isEqualTo(3); // unchanged
+        assertThat(s.getUpdatedAt()).isAfter(staleUpdatedAt);
     }
 
     @Test

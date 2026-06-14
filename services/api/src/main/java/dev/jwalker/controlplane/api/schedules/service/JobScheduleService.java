@@ -116,6 +116,15 @@ public class JobScheduleService {
         return Optional.of(JobScheduleResponse.from(s));
     }
 
+    // Partial update: each request field that's non-null is applied; null
+    // fields are left alone. Cron and timezone re-validate via the same
+    // parsers used on create, throwing InvalidScheduleConfigException with
+    // an appropriate Reason that the controller's handler maps to 400. The
+    // unique-name violation translates to 409 the same way create does.
+    //
+    // nextRunAt is recomputed only when cron or timezone actually changed
+    // AND the schedule is enabled. Paused schedules keep nextRunAt = null;
+    // the new cron/tz takes effect when the user next resumes.
     @Transactional
     public Optional<JobScheduleResponse> update(UUID scheduleId, JobScheduleUpdateRequest request) {
         Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
@@ -165,6 +174,12 @@ public class JobScheduleService {
         }
     }
 
+    // Soft delete: repository.delete() is intercepted by the entity's
+    // @SQLDelete annotation, which runs an UPDATE setting deleted_at instead
+    // of an actual DELETE. The row stays in the table for lineage queries
+    // (jobs created from this schedule still reference its id) but vanishes
+    // from normal API queries via @SQLRestriction. Returning a boolean lets
+    // the controller decide between 204 (found and deleted) and 404 (missing).
     @Transactional
     public boolean delete(UUID scheduleId) {
         Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
