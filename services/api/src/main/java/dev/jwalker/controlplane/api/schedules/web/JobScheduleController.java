@@ -1,5 +1,6 @@
 package dev.jwalker.controlplane.api.schedules.web;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.service.InvalidScheduleConfigException;
@@ -52,8 +53,8 @@ public class JobScheduleController {
     }
 
     @GetMapping("/{id}")
-    public JobScheduleResponse get(@PathVariable UUID id) {
-        return jobScheduleService.findById(id)
+    public JobScheduleResponse get(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobScheduleService.findById(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
@@ -63,19 +64,21 @@ public class JobScheduleController {
             @RequestParam(required = false) JobType type,
             @RequestParam(required = false) JobPriority priority,
             @RequestParam(required = false) UUID ownerId,
-            @PageableDefault(size = 20, sort = "nextRunAt", direction = Sort.Direction.ASC) Pageable pageable) {
-        return jobScheduleService.search(enabled, type, priority, ownerId, pageable);
+            @PageableDefault(size = 20, sort = "nextRunAt", direction = Sort.Direction.ASC) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        return jobScheduleService.search(
+                enabled, type, priority, ownerId, pageable, AuthenticatedCaller.from(jwt));
     }
 
     @PostMapping("/{id}/pause")
-    public JobScheduleResponse pause(@PathVariable UUID id) {
-        return jobScheduleService.pause(id)
+    public JobScheduleResponse pause(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobScheduleService.pause(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
     @PostMapping("/{id}/resume")
-    public JobScheduleResponse resume(@PathVariable UUID id) {
-        return jobScheduleService.resume(id)
+    public JobScheduleResponse resume(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return jobScheduleService.resume(id, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
@@ -87,8 +90,9 @@ public class JobScheduleController {
     @PatchMapping("/{id}")
     public JobScheduleResponse update(
             @PathVariable UUID id,
-            @Valid @RequestBody JobScheduleUpdateRequest request) {
-        return jobScheduleService.update(id, request)
+            @Valid @RequestBody JobScheduleUpdateRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return jobScheduleService.update(id, request, AuthenticatedCaller.from(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found"));
     }
 
@@ -98,8 +102,8 @@ public class JobScheduleController {
     // soft-deleted ones are invisible to the service's lookup).
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        if (!jobScheduleService.delete(id)) {
+    public void delete(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        if (!jobScheduleService.delete(id, AuthenticatedCaller.from(jwt))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found");
         }
     }

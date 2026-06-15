@@ -583,6 +583,116 @@ class JobScheduleControllerIntegrationTest {
                 .andExpect(status().isCreated());
     }
 
+    @Test
+    void get_byNonOwnerUser_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(aliceToken, "Alice's Sched");
+
+        mockMvc.perform(get("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_byOperator_returns200() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(aliceToken, "Alice's Sched");
+
+        mockMvc.perform(get("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(scheduleId));
+    }
+
+    @Test
+    void list_byUser_returnsOnlyOwnSchedules() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        createScheduleAndReturnId(aliceToken, "A1");
+        createScheduleAndReturnId(aliceToken, "A2");
+        createScheduleAndReturnId(bobToken, "B1");
+
+        mockMvc.perform(get("/api/schedules")
+                        .header("Authorization", "Bearer " + aliceToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        mockMvc.perform(get("/api/schedules")
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void list_byOperator_returnsAllSchedules() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+        createScheduleAndReturnId(aliceToken, "A1");
+        createScheduleAndReturnId(bobToken, "B1");
+
+        mockMvc.perform(get("/api/schedules")
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void update_byNonOwnerUser_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(aliceToken, "Alice's Sched");
+
+        JobScheduleUpdateRequest body = new JobScheduleUpdateRequest(
+                "Bob Tried", null, null, null, null, null);
+
+        mockMvc.perform(patch("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + bobToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void delete_byNonOwnerUser_returns404() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String bobToken = loginAndExtractAccess("bob@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(aliceToken, "Alice's Sched");
+
+        mockMvc.perform(delete("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + bobToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void pause_byOperator_succeeds() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+        String scheduleId = createScheduleAndReturnId(aliceToken, "Alice's Sched");
+
+        mockMvc.perform(post("/api/schedules/" + scheduleId + "/pause")
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
+    }
+
     private JobSchedule seedDisabledSchedule(String ownerEmail, String name) {
         User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
         JobSchedule s = new JobSchedule(null, owner, name, JobType.CRM_SYNC, "{}",
@@ -592,8 +702,12 @@ class JobScheduleControllerIntegrationTest {
     }
 
     private void seedUser(String email, String rawPassword) {
-        Role role = roleRepository.findByName("USER")
-                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, "USER")));
+        seedUserWithRole(email, rawPassword, "USER");
+    }
+
+    private void seedUserWithRole(String email, String rawPassword, String roleName) {
+        Role role = roleRepository.findByName(roleName)
+                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, roleName)));
         User user = new User(null, email, passwordEncoder.encode(rawPassword), UserStatus.ACTIVE);
         user.addRole(role);
         userRepository.saveAndFlush(user);

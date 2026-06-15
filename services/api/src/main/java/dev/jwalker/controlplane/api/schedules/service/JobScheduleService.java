@@ -1,5 +1,6 @@
 package dev.jwalker.controlplane.api.schedules.service;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
@@ -86,8 +87,10 @@ public class JobScheduleService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<JobScheduleResponse> findById(UUID scheduleId) {
-        return jobScheduleRepository.findByIdWithOwner(scheduleId).map(JobScheduleResponse::from);
+    public Optional<JobScheduleResponse> findById(UUID scheduleId, AuthenticatedCaller caller) {
+        return jobScheduleRepository.findByIdWithOwner(scheduleId)
+                .filter(s -> canAccess(s, caller))
+                .map(JobScheduleResponse::from);
     }
 
     @Transactional(readOnly = true)
@@ -96,14 +99,17 @@ public class JobScheduleService {
             JobType type,
             JobPriority priority,
             UUID ownerId,
-            Pageable pageable) {
-        return jobScheduleRepository.search(enabled, type, priority, ownerId, pageable)
+            Pageable pageable,
+            AuthenticatedCaller caller) {
+        UUID effectiveOwnerId = caller.isPrivileged() ? ownerId : caller.userId();
+        return jobScheduleRepository.search(enabled, type, priority, effectiveOwnerId, pageable)
                 .map(JobScheduleResponse::from);
     }
 
     @Transactional
-    public Optional<JobScheduleResponse> pause(UUID scheduleId) {
-        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+    public Optional<JobScheduleResponse> pause(UUID scheduleId, AuthenticatedCaller caller) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId)
+                .filter(s -> canAccess(s, caller));
         if (opt.isEmpty()) {
             return Optional.empty();
         }
@@ -126,8 +132,9 @@ public class JobScheduleService {
     // AND the schedule is enabled. Paused schedules keep nextRunAt = null;
     // the new cron/tz takes effect when the user next resumes.
     @Transactional
-    public Optional<JobScheduleResponse> update(UUID scheduleId, JobScheduleUpdateRequest request) {
-        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+    public Optional<JobScheduleResponse> update(UUID scheduleId, JobScheduleUpdateRequest request, AuthenticatedCaller caller) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId)
+                .filter(s -> canAccess(s, caller));
         if (opt.isEmpty()) {
             return Optional.empty();
         }
@@ -181,8 +188,9 @@ public class JobScheduleService {
     // from normal API queries via @SQLRestriction. Returning a boolean lets
     // the controller decide between 204 (found and deleted) and 404 (missing).
     @Transactional
-    public boolean delete(UUID scheduleId) {
-        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+    public boolean delete(UUID scheduleId, AuthenticatedCaller caller) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId)
+                .filter(s -> canAccess(s, caller));
         if (opt.isEmpty()) {
             return false;
         }
@@ -191,8 +199,9 @@ public class JobScheduleService {
     }
 
     @Transactional
-    public Optional<JobScheduleResponse> resume(UUID scheduleId) {
-        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId);
+    public Optional<JobScheduleResponse> resume(UUID scheduleId, AuthenticatedCaller caller) {
+        Optional<JobSchedule> opt = jobScheduleRepository.findByIdWithOwner(scheduleId)
+                .filter(s -> canAccess(s, caller));
         if (opt.isEmpty()) {
             return Optional.empty();
         }
@@ -211,5 +220,9 @@ public class JobScheduleService {
         ZonedDateTime now = ZonedDateTime.now(zone);
         Temporal next = cron.next(now);
         return next == null ? null : ((ZonedDateTime) next).toOffsetDateTime();
+    }
+
+    private static boolean canAccess(JobSchedule schedule, AuthenticatedCaller caller) {
+        return caller.isPrivileged() || schedule.getOwner().getId().equals(caller.userId());
     }
 }

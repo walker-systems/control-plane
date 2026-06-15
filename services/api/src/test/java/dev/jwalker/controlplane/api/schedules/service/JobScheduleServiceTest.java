@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
@@ -20,6 +21,7 @@ import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -47,10 +49,16 @@ class JobScheduleServiceTest {
     private JobScheduleService jobScheduleService;
 
     private User owner;
+    private AuthenticatedCaller ownerCaller;
+    private AuthenticatedCaller otherUserCaller;
+    private AuthenticatedCaller operatorCaller;
 
     @BeforeEach
     void setUp() {
         owner = new User(UUID.randomUUID(), "owner@example.com", "hashed", UserStatus.ACTIVE);
+        ownerCaller = new AuthenticatedCaller(owner.getId(), Set.of("USER"));
+        otherUserCaller = new AuthenticatedCaller(UUID.randomUUID(), Set.of("USER"));
+        operatorCaller = new AuthenticatedCaller(UUID.randomUUID(), Set.of("OPERATOR"));
     }
 
     @Test
@@ -156,7 +164,7 @@ class JobScheduleServiceTest {
         schedule.setUpdatedAt(OffsetDateTime.now());
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(schedule));
 
-        Optional<JobScheduleResponse> response = jobScheduleService.findById(scheduleId);
+        Optional<JobScheduleResponse> response = jobScheduleService.findById(scheduleId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().id()).isEqualTo(scheduleId);
@@ -169,7 +177,7 @@ class JobScheduleServiceTest {
         UUID scheduleId = UUID.randomUUID();
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
 
-        assertThat(jobScheduleService.findById(scheduleId)).isEmpty();
+        assertThat(jobScheduleService.findById(scheduleId, ownerCaller)).isEmpty();
     }
 
     @Test
@@ -180,7 +188,7 @@ class JobScheduleServiceTest {
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
         when(jobScheduleRepository.save(s)).thenReturn(s);
 
-        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId);
+        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().enabled()).isFalse();
@@ -197,7 +205,7 @@ class JobScheduleServiceTest {
         s.setNextRunAt(null);
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
 
-        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId);
+        Optional<JobScheduleResponse> response = jobScheduleService.pause(scheduleId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().enabled()).isFalse();
@@ -209,7 +217,7 @@ class JobScheduleServiceTest {
         UUID scheduleId = UUID.randomUUID();
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
 
-        assertThat(jobScheduleService.pause(scheduleId)).isEmpty();
+        assertThat(jobScheduleService.pause(scheduleId, ownerCaller)).isEmpty();
         verify(jobScheduleRepository, never()).save(any());
     }
 
@@ -223,7 +231,7 @@ class JobScheduleServiceTest {
         when(jobScheduleRepository.save(s)).thenReturn(s);
 
         OffsetDateTime before = OffsetDateTime.now();
-        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId);
+        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().enabled()).isTrue();
@@ -239,7 +247,7 @@ class JobScheduleServiceTest {
         s.setNextRunAt(originalNextRun);
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
 
-        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId);
+        Optional<JobScheduleResponse> response = jobScheduleService.resume(scheduleId, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(response.get().enabled()).isTrue();
@@ -252,7 +260,7 @@ class JobScheduleServiceTest {
         UUID scheduleId = UUID.randomUUID();
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
 
-        assertThat(jobScheduleService.resume(scheduleId)).isEmpty();
+        assertThat(jobScheduleService.resume(scheduleId, ownerCaller)).isEmpty();
         verify(jobScheduleRepository, never()).save(any());
     }
 
@@ -271,7 +279,7 @@ class JobScheduleServiceTest {
         JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
                 "Renamed", null, JobPriority.HIGH, null, null, null);
 
-        Optional<JobScheduleResponse> response = jobScheduleService.update(scheduleId, request);
+        Optional<JobScheduleResponse> response = jobScheduleService.update(scheduleId, request, ownerCaller);
 
         assertThat(response).isPresent();
         assertThat(s.getName()).isEqualTo("Renamed");
@@ -293,7 +301,7 @@ class JobScheduleServiceTest {
                 null, null, null, null, "0 0 12 * * *", null);
 
         OffsetDateTime before = OffsetDateTime.now();
-        jobScheduleService.update(scheduleId, request);
+        jobScheduleService.update(scheduleId, request, ownerCaller);
 
         assertThat(s.getCronExpression()).isEqualTo("0 0 12 * * *");
         assertThat(s.getNextRunAt()).isAfter(before);
@@ -311,7 +319,7 @@ class JobScheduleServiceTest {
         JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
                 null, null, null, null, "0 0 12 * * *", null);
 
-        jobScheduleService.update(scheduleId, request);
+        jobScheduleService.update(scheduleId, request, ownerCaller);
 
         assertThat(s.getCronExpression()).isEqualTo("0 0 12 * * *");
         assertThat(s.getNextRunAt()).isNull();
@@ -326,7 +334,7 @@ class JobScheduleServiceTest {
         JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
                 null, null, null, null, "not-a-cron", null);
 
-        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request))
+        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request, ownerCaller))
                 .isInstanceOf(InvalidScheduleConfigException.class)
                 .extracting(e -> ((InvalidScheduleConfigException) e).reason())
                 .isEqualTo(InvalidScheduleConfigException.Reason.INVALID_CRON);
@@ -344,7 +352,7 @@ class JobScheduleServiceTest {
         JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
                 "Taken Name", null, null, null, null, null);
 
-        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request))
+        assertThatThrownBy(() -> jobScheduleService.update(scheduleId, request, ownerCaller))
                 .isInstanceOf(InvalidScheduleConfigException.class)
                 .extracting(e -> ((InvalidScheduleConfigException) e).reason())
                 .isEqualTo(InvalidScheduleConfigException.Reason.DUPLICATE_NAME);
@@ -358,7 +366,7 @@ class JobScheduleServiceTest {
         JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
                 "Anything", null, null, null, null, null);
 
-        assertThat(jobScheduleService.update(scheduleId, request)).isEmpty();
+        assertThat(jobScheduleService.update(scheduleId, request, ownerCaller)).isEmpty();
         verify(jobScheduleRepository, never()).saveAndFlush(any());
     }
 
@@ -368,7 +376,7 @@ class JobScheduleServiceTest {
         JobSchedule s = enabledSchedule(scheduleId);
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
 
-        boolean result = jobScheduleService.delete(scheduleId);
+        boolean result = jobScheduleService.delete(scheduleId, ownerCaller);
 
         assertThat(result).isTrue();
         verify(jobScheduleRepository).delete(s);
@@ -379,7 +387,7 @@ class JobScheduleServiceTest {
         UUID scheduleId = UUID.randomUUID();
         when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.empty());
 
-        assertThat(jobScheduleService.delete(scheduleId)).isFalse();
+        assertThat(jobScheduleService.delete(scheduleId, ownerCaller)).isFalse();
         verify(jobScheduleRepository, never()).delete(any(JobSchedule.class));
     }
 
@@ -402,15 +410,82 @@ class JobScheduleServiceTest {
         schedule.setUpdatedAt(OffsetDateTime.now());
         Page<JobSchedule> page = new PageImpl<>(List.of(schedule), pageable, 1);
 
-        when(jobScheduleRepository.search(true, JobType.CRM_SYNC, null, null, pageable))
+        when(jobScheduleRepository.search(true, JobType.CRM_SYNC, null, owner.getId(), pageable))
                 .thenReturn(page);
 
         Page<JobScheduleResponse> result = jobScheduleService.search(
-                true, JobType.CRM_SYNC, null, null, pageable);
+                true, JobType.CRM_SYNC, null, null, pageable, ownerCaller);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).name()).isEqualTo("Daily Sync");
         assertThat(result.getContent().get(0).ownerEmail()).isEqualTo("owner@example.com");
+    }
+
+    @Test
+    void search_forUser_silentlyForcesOwnerIdToSelf() {
+        Pageable pageable = PageRequest.of(0, 10);
+        UUID someoneElse = UUID.randomUUID();
+        Page<JobSchedule> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        when(jobScheduleRepository.search(null, null, null, owner.getId(), pageable))
+                .thenReturn(emptyPage);
+
+        jobScheduleService.search(null, null, null, someoneElse, pageable, ownerCaller);
+
+        verify(jobScheduleRepository).search(null, null, null, owner.getId(), pageable);
+    }
+
+    @Test
+    void search_forOperator_respectsOwnerIdFilter() {
+        Pageable pageable = PageRequest.of(0, 10);
+        UUID someoneElse = UUID.randomUUID();
+        Page<JobSchedule> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+        when(jobScheduleRepository.search(null, null, null, someoneElse, pageable))
+                .thenReturn(emptyPage);
+
+        jobScheduleService.search(null, null, null, someoneElse, pageable, operatorCaller);
+
+        verify(jobScheduleRepository).search(null, null, null, someoneElse, pageable);
+    }
+
+    @Test
+    void findById_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        assertThat(jobScheduleService.findById(scheduleId, otherUserCaller)).isEmpty();
+    }
+
+    @Test
+    void findById_returnsResponse_whenCallerIsOperator() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        assertThat(jobScheduleService.findById(scheduleId, operatorCaller)).isPresent();
+    }
+
+    @Test
+    void update_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        JobScheduleUpdateRequest request = new JobScheduleUpdateRequest(
+                "X", null, null, null, null, null);
+
+        assertThat(jobScheduleService.update(scheduleId, request, otherUserCaller)).isEmpty();
+        verify(jobScheduleRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void delete_returnsFalse_whenCallerIsUnprivilegedNonOwner() {
+        UUID scheduleId = UUID.randomUUID();
+        JobSchedule s = enabledSchedule(scheduleId);
+        when(jobScheduleRepository.findByIdWithOwner(scheduleId)).thenReturn(Optional.of(s));
+
+        assertThat(jobScheduleService.delete(scheduleId, otherUserCaller)).isFalse();
+        verify(jobScheduleRepository, never()).delete(any(JobSchedule.class));
     }
 
     @Test
