@@ -99,7 +99,7 @@ class JobRepositoryTest {
     void findBySourceSchedule_returnsJobsLinkedToSchedule() {
         User owner = savedUser("owner@example.com");
         JobSchedule schedule = jobScheduleRepository.saveAndFlush(
-                new JobSchedule(null, owner, JobType.CRM_SYNC, null, JobPriority.LOW, 0, "0 * * * *", "UTC"));
+                new JobSchedule(null, owner, "sched-test", JobType.CRM_SYNC, null, JobPriority.LOW, 0, "0 0 * * * *", "UTC"));
 
         Job scheduledJob = new Job(null, owner, schedule, JobType.CRM_SYNC, null, JobStatus.PENDING, JobPriority.LOW, null, 0);
         jobRepository.saveAndFlush(scheduledJob);

@@ -21,6 +21,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 
 @Entity
@@ -28,6 +30,8 @@ import org.hibernate.type.SqlTypes;
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@SQLDelete(sql = "UPDATE job_schedules SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?")
+@SQLRestriction("deleted_at IS NULL")
 public class JobSchedule {
 
     @Id
@@ -37,6 +41,9 @@ public class JobSchedule {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_user_id", nullable = false)
     private User owner;
+
+    @Column(nullable = false, length = 120)
+    private String name;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 100)
@@ -66,7 +73,7 @@ public class JobSchedule {
     private OffsetDateTime lastEnqueuedAt;
 
     @Column(nullable = false)
-    private boolean paused;
+    private boolean enabled;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -74,9 +81,13 @@ public class JobSchedule {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     public JobSchedule(
             UUID id,
             User owner,
+            String name,
             JobType type,
             String payloadJson,
             JobPriority priority,
@@ -86,12 +97,14 @@ public class JobSchedule {
     ) {
         this.id = id;
         this.owner = owner;
+        this.name = name;
         this.type = type;
         this.payloadJson = payloadJson;
         this.priority = priority;
         this.maxRetries = maxRetries;
         this.cronExpression = cronExpression;
         this.timezone = timezone;
+        this.enabled = true;
     }
 
     @PrePersist
@@ -113,13 +126,13 @@ public class JobSchedule {
         this.updatedAt = OffsetDateTime.now();
     }
 
-    public void pause() {
-        this.paused = true;
+    public void disable() {
+        this.enabled = false;
         touch();
     }
 
-    public void resume() {
-        this.paused = false;
+    public void enable() {
+        this.enabled = true;
         touch();
     }
 
