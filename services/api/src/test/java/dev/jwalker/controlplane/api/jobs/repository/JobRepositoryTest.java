@@ -96,19 +96,19 @@ class JobRepositoryTest {
     }
 
     @Test
-    void findBySourceSchedule_returnsJobsLinkedToSchedule() {
+    void findBySourceScheduleId_returnsJobsLinkedToSchedule() {
         User owner = savedUser("owner@example.com");
         JobSchedule schedule = jobScheduleRepository.saveAndFlush(
                 new JobSchedule(null, owner, "sched-test", JobType.CRM_SYNC, null, JobPriority.LOW, 0, "0 0 * * * *", "UTC"));
 
-        Job scheduledJob = new Job(null, owner, schedule, JobType.CRM_SYNC, null, JobStatus.PENDING, JobPriority.LOW, null, 0);
+        Job scheduledJob = new Job(null, owner, schedule.getId(), JobType.CRM_SYNC, null, JobStatus.PENDING, JobPriority.LOW, null, 0);
         jobRepository.saveAndFlush(scheduledJob);
         savedJob(owner, JobStatus.PENDING, null);
 
-        List<Job> result = jobRepository.findBySourceSchedule(schedule);
+        List<Job> result = jobRepository.findBySourceScheduleId(schedule.getId());
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getSourceSchedule().getId()).isEqualTo(schedule.getId());
+        assertThat(result.get(0).getSourceScheduleId()).isEqualTo(schedule.getId());
     }
 
     @Test

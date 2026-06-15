@@ -32,7 +32,7 @@ public record JobResponse(
                 job.getPriority(),
                 job.getIdempotencyKey(),
                 job.getMaxRetries(),
-                job.getSourceSchedule() == null ? null : job.getSourceSchedule().getId(),
+                job.getSourceScheduleId(),
                 job.getCreatedAt(),
                 job.getUpdatedAt());
     }

@@ -1,6 +1,5 @@
 package dev.jwalker.controlplane.api.jobs.model;
 
-import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
 import dev.jwalker.controlplane.api.users.model.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,9 +36,13 @@ public class Job {
     @JoinColumn(name = "owner_user_id", nullable = false)
     private User owner;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "source_schedule_id")
-    private JobSchedule sourceSchedule;
+    // Stored as a plain UUID, not a @ManyToOne relationship, so the FK survives
+    // even when the referenced schedule has been soft-deleted. A JPA association
+    // would be filtered out by JobSchedule's @SQLRestriction("deleted_at IS NULL")
+    // and the lineage would silently vanish — exactly what soft delete was meant
+    // to preserve. Code that needs the live schedule does a separate lookup.
+    @Column(name = "source_schedule_id")
+    private UUID sourceScheduleId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 100)
@@ -72,7 +75,7 @@ public class Job {
     public Job(
             UUID id,
             User owner,
-            JobSchedule sourceSchedule,
+            UUID sourceScheduleId,
             JobType type,
             String payloadJson,
             JobStatus status,
@@ -82,7 +85,7 @@ public class Job {
     ) {
         this.id = id;
         this.owner = owner;
-        this.sourceSchedule = sourceSchedule;
+        this.sourceScheduleId = sourceScheduleId;
         this.type = type;
         this.payloadJson = payloadJson;
         this.status = status;
@@ -111,7 +114,7 @@ public class Job {
     }
 
     public boolean isScheduledJob() {
-        return sourceSchedule != null;
+        return sourceScheduleId != null;
     }
 
     @Override
