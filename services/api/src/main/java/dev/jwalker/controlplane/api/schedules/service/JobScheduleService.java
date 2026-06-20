@@ -1,5 +1,7 @@
 package dev.jwalker.controlplane.api.schedules.service;
 
+import dev.jwalker.controlplane.api.audit.model.AuditEventType;
+import dev.jwalker.controlplane.api.audit.service.AuditEventService;
 import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
@@ -15,6 +17,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.Temporal;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ public class JobScheduleService {
 
     private final JobScheduleRepository jobScheduleRepository;
     private final UserRepository userRepository;
+    private final AuditEventService auditEventService;
 
     @Transactional
     public JobScheduleResponse create(UUID ownerId, JobScheduleCreateRequest request) {
@@ -58,7 +62,16 @@ public class JobScheduleService {
         schedule.setNextRunAt(nextRunAt);
 
         try {
-            return JobScheduleResponse.from(jobScheduleRepository.saveAndFlush(schedule));
+            JobSchedule saved = jobScheduleRepository.saveAndFlush(schedule);
+            auditEventService.record(
+                    AuditEventType.SCHEDULE_CREATED,
+                    "JobSchedule",
+                    saved.getId(),
+                    Map.of(
+                            "name", saved.getName(),
+                            "type", saved.getType().name(),
+                            "priority", saved.getPriority().name()));
+            return JobScheduleResponse.from(saved);
         } catch (DataIntegrityViolationException e) {
             throw new InvalidScheduleConfigException(
                     InvalidScheduleConfigException.Reason.DUPLICATE_NAME,
@@ -118,6 +131,11 @@ public class JobScheduleService {
             s.disable();
             s.setNextRunAt(null);
             jobScheduleRepository.save(s);
+            auditEventService.record(
+                    AuditEventType.SCHEDULE_PAUSED,
+                    "JobSchedule",
+                    s.getId(),
+                    Map.of("name", s.getName()));
         }
         return Optional.of(JobScheduleResponse.from(s));
     }
@@ -173,7 +191,13 @@ public class JobScheduleService {
         s.touch();
 
         try {
-            return Optional.of(JobScheduleResponse.from(jobScheduleRepository.saveAndFlush(s)));
+            JobSchedule saved = jobScheduleRepository.saveAndFlush(s);
+            auditEventService.record(
+                    AuditEventType.SCHEDULE_UPDATED,
+                    "JobSchedule",
+                    saved.getId(),
+                    Map.of("name", saved.getName()));
+            return Optional.of(JobScheduleResponse.from(saved));
         } catch (DataIntegrityViolationException e) {
             throw new InvalidScheduleConfigException(
                     InvalidScheduleConfigException.Reason.DUPLICATE_NAME,
@@ -194,7 +218,13 @@ public class JobScheduleService {
         if (opt.isEmpty()) {
             return false;
         }
-        jobScheduleRepository.delete(opt.get());
+        JobSchedule s = opt.get();
+        jobScheduleRepository.delete(s);
+        auditEventService.record(
+                AuditEventType.SCHEDULE_DELETED,
+                "JobSchedule",
+                s.getId(),
+                Map.of("name", s.getName()));
         return true;
     }
 
@@ -212,6 +242,11 @@ public class JobScheduleService {
             s.enable();
             s.setNextRunAt(computeNextRunAt(cron, zone));
             jobScheduleRepository.save(s);
+            auditEventService.record(
+                    AuditEventType.SCHEDULE_RESUMED,
+                    "JobSchedule",
+                    s.getId(),
+                    Map.of("name", s.getName()));
         }
         return Optional.of(JobScheduleResponse.from(s));
     }

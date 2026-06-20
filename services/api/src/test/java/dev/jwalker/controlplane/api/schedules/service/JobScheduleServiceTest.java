@@ -3,10 +3,13 @@ package dev.jwalker.controlplane.api.schedules.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.jwalker.controlplane.api.audit.model.AuditEventType;
+import dev.jwalker.controlplane.api.audit.service.AuditEventService;
 import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
@@ -44,6 +47,9 @@ class JobScheduleServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private AuditEventService auditEventService;
 
     @InjectMocks
     private JobScheduleService jobScheduleService;
@@ -93,6 +99,9 @@ class JobScheduleServiceTest {
         assertThat(response.name()).isEqualTo("Daily CRM Sync");
         assertThat(response.enabled()).isTrue();
         assertThat(response.ownerEmail()).isEqualTo("owner@example.com");
+
+        verify(auditEventService).record(
+                eq(AuditEventType.SCHEDULE_CREATED), eq("JobSchedule"), eq(saved.getId()), any());
     }
 
     @Test
@@ -195,6 +204,9 @@ class JobScheduleServiceTest {
         assertThat(response.get().nextRunAt()).isNull();
         assertThat(s.isEnabled()).isFalse();
         assertThat(s.getNextRunAt()).isNull();
+
+        verify(auditEventService).record(
+                eq(AuditEventType.SCHEDULE_PAUSED), eq("JobSchedule"), eq(scheduleId), any());
     }
 
     @Test
@@ -210,6 +222,8 @@ class JobScheduleServiceTest {
         assertThat(response).isPresent();
         assertThat(response.get().enabled()).isFalse();
         verify(jobScheduleRepository, never()).save(any());
+        // Idempotent no-op: no transition happened, so no audit either.
+        verify(auditEventService, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -237,6 +251,9 @@ class JobScheduleServiceTest {
         assertThat(response.get().enabled()).isTrue();
         assertThat(response.get().nextRunAt()).isNotNull();
         assertThat(response.get().nextRunAt()).isAfter(before);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.SCHEDULE_RESUMED), eq("JobSchedule"), eq(scheduleId), any());
     }
 
     @Test
@@ -285,6 +302,9 @@ class JobScheduleServiceTest {
         assertThat(s.getName()).isEqualTo("Renamed");
         assertThat(s.getPriority()).isEqualTo(JobPriority.HIGH);
         assertThat(s.getMaxRetries()).isEqualTo(3); // unchanged
+
+        verify(auditEventService).record(
+                eq(AuditEventType.SCHEDULE_UPDATED), eq("JobSchedule"), eq(scheduleId), any());
         assertThat(s.getUpdatedAt()).isAfter(staleUpdatedAt);
     }
 
@@ -380,6 +400,8 @@ class JobScheduleServiceTest {
 
         assertThat(result).isTrue();
         verify(jobScheduleRepository).delete(s);
+        verify(auditEventService).record(
+                eq(AuditEventType.SCHEDULE_DELETED), eq("JobSchedule"), eq(scheduleId), any());
     }
 
     @Test
