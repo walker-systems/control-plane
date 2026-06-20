@@ -15,6 +15,8 @@ import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
+import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
+import dev.jwalker.controlplane.api.schedules.repository.JobScheduleRepository;
 import dev.jwalker.controlplane.api.users.model.Role;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
@@ -27,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -65,6 +68,12 @@ class JobControllerIntegrationTest {
     private JobRepository jobRepository;
 
     @Autowired
+    private JobScheduleRepository jobScheduleRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -75,6 +84,10 @@ class JobControllerIntegrationTest {
     @BeforeEach
     void setUp() {
         jobRepository.deleteAll();
+        // Raw SQL bypasses @SQLRestriction so soft-deleted schedules from
+        // prior tests get hard-deleted, otherwise the FK to users blocks
+        // userRepository.deleteAll() below.
+        jdbcTemplate.execute("DELETE FROM job_schedules");
         userRepository.deleteAll();
 
         mockMvc = MockMvcBuilders
@@ -501,6 +514,35 @@ class JobControllerIntegrationTest {
         Job job = new Job(null, owner, null, JobType.CRM_SYNC, "{}",
                 status, JobPriority.MEDIUM, null, 3);
         return jobRepository.saveAndFlush(job);
+    }
+
+    @Test
+    void get_jobWithSoftDeletedSchedule_stillReportsSourceScheduleId() throws Exception {
+        seedUser("alice@example.com", "password");
+        User alice = userRepository.findByEmail("alice@example.com").orElseThrow();
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobSchedule schedule = jobScheduleRepository.saveAndFlush(
+                new JobSchedule(null, alice, "lineage-test", JobType.CRM_SYNC, "{}",
+                        JobPriority.MEDIUM, 3, "0 0 * * * *", "UTC"));
+        UUID scheduleId = schedule.getId();
+
+        Job job = jobRepository.saveAndFlush(new Job(
+                null, alice, scheduleId, JobType.CRM_SYNC, "{}",
+                JobStatus.PENDING, JobPriority.MEDIUM, null, 3));
+        UUID jobId = job.getId();
+
+        // Soft delete the schedule. The job still references it via
+        // source_schedule_id, and we want that lineage to survive in the
+        // API response — that's the whole point of soft delete.
+        jobScheduleRepository.delete(schedule);
+        jobScheduleRepository.flush();
+
+        mockMvc.perform(get("/api/jobs/" + jobId)
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(jobId.toString()))
+                .andExpect(jsonPath("$.sourceScheduleId").value(scheduleId.toString()));
     }
 
     @Test

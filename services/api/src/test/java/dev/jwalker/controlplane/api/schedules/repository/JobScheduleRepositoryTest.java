@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -35,6 +36,9 @@ class JobScheduleRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private final AtomicInteger nameCounter = new AtomicInteger();
 
@@ -107,6 +111,30 @@ class JobScheduleRepositoryTest {
         List<JobSchedule> result = jobScheduleRepository.findDueSchedules(now);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void insert_withoutSpecifyingEnabled_defaultsToTrue() {
+        User owner = savedUser("owner@example.com");
+
+        // Insert via native SQL omitting `enabled` so the DB DEFAULT fires —
+        // simulates a DBA script, future migration, or any code path that
+        // bypasses the entity constructor. Without V9 this would default
+        // to false because RENAME COLUMN preserved the old paused=FALSE
+        // default after we flipped the semantics.
+        jdbcTemplate.update("""
+                INSERT INTO job_schedules
+                    (id, owner_user_id, name, type, priority, max_retries,
+                     cron_expression, timezone)
+                VALUES
+                    (gen_random_uuid(), ?, 'default-test', 'CRM_SYNC', 'MEDIUM',
+                     3, '0 0 * * * *', 'UTC')
+                """, owner.getId());
+
+        Boolean enabled = jdbcTemplate.queryForObject(
+                "SELECT enabled FROM job_schedules WHERE name = 'default-test'",
+                Boolean.class);
+        assertThat(enabled).isTrue();
     }
 
     @Test
