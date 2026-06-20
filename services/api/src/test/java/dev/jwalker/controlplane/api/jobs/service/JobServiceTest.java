@@ -3,10 +3,13 @@ package dev.jwalker.controlplane.api.jobs.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.jwalker.controlplane.api.audit.model.AuditEventType;
+import dev.jwalker.controlplane.api.audit.service.AuditEventService;
 import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
@@ -43,6 +46,9 @@ class JobServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private AuditEventService auditEventService;
 
     @InjectMocks
     private JobService jobService;
@@ -89,6 +95,9 @@ class JobServiceTest {
 
         assertThat(response.ownerEmail()).isEqualTo("owner@example.com");
         assertThat(response.status()).isEqualTo(JobStatus.PENDING);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.JOB_CREATED), eq("Job"), eq(saved.getId()), any());
     }
 
     @Test
@@ -182,6 +191,9 @@ class JobServiceTest {
 
         assertThat(response).isPresent();
         assertThat(response.get().status()).isEqualTo(JobStatus.CANCELLED);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.JOB_CANCELLED), eq("Job"), eq(jobId), any());
     }
 
     @Test
@@ -205,6 +217,7 @@ class JobServiceTest {
                 .extracting(e -> ((JobStateException) e).reason())
                 .isEqualTo(JobStateException.Reason.CANNOT_CANCEL);
         verify(jobRepository, never()).save(any());
+        verify(auditEventService, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -230,6 +243,9 @@ class JobServiceTest {
 
         assertThat(response).isPresent();
         assertThat(response.get().status()).isEqualTo(JobStatus.PENDING);
+
+        verify(auditEventService).record(
+                eq(AuditEventType.JOB_RETRIED), eq("Job"), eq(jobId), any());
     }
 
     @Test
