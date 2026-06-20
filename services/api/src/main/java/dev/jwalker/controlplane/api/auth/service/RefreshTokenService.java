@@ -51,13 +51,13 @@ public class RefreshTokenService {
     }
 
     @Transactional
-    public void revokeIfPresent(String rawToken) {
+    public Optional<RefreshToken> revokeIfPresent(String rawToken) {
         String tokenHash = hash(rawToken);
-        repository.findByTokenHash(tokenHash)
+        return repository.findByTokenHash(tokenHash)
                 .filter(t -> !t.isRevoked())
-                .ifPresent(t -> {
+                .map(t -> {
                     t.revoke();
-                    repository.save(t);
+                    return repository.save(t);
                 });
     }
 

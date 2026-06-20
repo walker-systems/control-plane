@@ -94,19 +94,21 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void revokeIfPresent_marksTokenRevoked() {
+    void revokeIfPresent_marksTokenRevoked_andReturnsIt() {
         User user = saveUser();
         RefreshTokenService.IssuedRefreshToken issued = service().issue(user);
 
-        service().revokeIfPresent(issued.rawToken());
+        Optional<RefreshToken> revoked = service().revokeIfPresent(issued.rawToken());
 
+        assertThat(revoked).isPresent();
+        assertThat(revoked.get().isRevoked()).isTrue();
         RefreshToken stored = refreshTokenRepository.findAll().get(0);
         assertThat(stored.isRevoked()).isTrue();
     }
 
     @Test
-    void revokeIfPresent_silentlyIgnoresUnknownToken() {
-        service().revokeIfPresent("nonexistent-token");
+    void revokeIfPresent_silentlyReturnsEmpty_forUnknownToken() {
+        assertThat(service().revokeIfPresent("nonexistent-token")).isEmpty();
         assertThat(refreshTokenRepository.findAll()).isEmpty();
     }
 }

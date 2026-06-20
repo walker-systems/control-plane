@@ -30,22 +30,43 @@ public class AuditEventService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
-    // Auto-actor: reads from SecurityContext. For LOGIN_FAILED and any other
-    // event where the caller isn't authenticated, use recordWithActor(null, ...).
+    // Auto-actor: reads from SecurityContext. Audit ties to the caller's
+    // transaction — if the caller rolls back, the audit row goes too.
     @Transactional(propagation = Propagation.REQUIRED)
     public AuditEvent record(
             AuditEventType eventType,
             String targetType,
             UUID targetId,
             Map<String, Object> metadata) {
-        return recordWithActor(eventType, currentActorIdOrNull(), targetType, targetId, metadata);
+        return doRecord(eventType, currentActorIdOrNull(), targetType, targetId, metadata);
     }
 
     // Explicit actor: for auth flows (login/refresh) where the user isn't in
-    // SecurityContext yet, or system actions where we don't want to inherit
-    // the current request's actor.
+    // SecurityContext yet, or system actions. Still ties to caller's transaction.
     @Transactional(propagation = Propagation.REQUIRED)
     public AuditEvent recordWithActor(
+            AuditEventType eventType,
+            UUID actorUserId,
+            String targetType,
+            UUID targetId,
+            Map<String, Object> metadata) {
+        return doRecord(eventType, actorUserId, targetType, targetId, metadata);
+    }
+
+    // REQUIRES_NEW for failure-audit cases (e.g., LOGIN_FAILED inside a catch
+    // block of a @Transactional method that will rethrow). The new transaction
+    // commits independently so the audit row survives the caller's rollback.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AuditEvent recordIndependently(
+            AuditEventType eventType,
+            UUID actorUserId,
+            String targetType,
+            UUID targetId,
+            Map<String, Object> metadata) {
+        return doRecord(eventType, actorUserId, targetType, targetId, metadata);
+    }
+
+    private AuditEvent doRecord(
             AuditEventType eventType,
             UUID actorUserId,
             String targetType,
@@ -97,7 +118,6 @@ public class AuditEventService {
         if (req == null) {
             return null;
         }
-        // Prefer X-Forwarded-For when behind a proxy; fall back to direct address.
         String forwarded = req.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();
