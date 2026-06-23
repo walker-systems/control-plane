@@ -3,6 +3,7 @@ package dev.jwalker.controlplane.api.audit.service;
 import dev.jwalker.controlplane.api.audit.model.AuditEvent;
 import dev.jwalker.controlplane.api.audit.model.AuditEventType;
 import dev.jwalker.controlplane.api.audit.repository.AuditEventRepository;
+import dev.jwalker.controlplane.api.audit.web.dto.AuditEventResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,8 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -64,6 +67,17 @@ public class AuditEventService {
             UUID targetId,
             Map<String, Object> metadata) {
         return doRecord(eventType, actorUserId, targetType, targetId, metadata);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AuditEventResponse> search(
+            AuditEventType eventType,
+            UUID actorUserId,
+            String targetType,
+            UUID targetId,
+            Pageable pageable) {
+        return auditEventRepository.search(eventType, actorUserId, targetType, targetId, pageable)
+                .map(AuditEventResponse::from);
     }
 
     private AuditEvent doRecord(

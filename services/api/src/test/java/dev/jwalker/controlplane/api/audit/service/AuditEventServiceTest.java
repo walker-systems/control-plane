@@ -2,14 +2,19 @@ package dev.jwalker.controlplane.api.audit.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 import dev.jwalker.controlplane.api.audit.model.AuditEvent;
 import dev.jwalker.controlplane.api.audit.model.AuditEventType;
 import dev.jwalker.controlplane.api.audit.repository.AuditEventRepository;
+import dev.jwalker.controlplane.api.audit.web.dto.AuditEventResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -20,6 +25,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -189,5 +198,31 @@ class AuditEventServiceTest {
         AuditEvent saved = captor.getValue();
         assertThat(saved.getIpAddress()).isNull();
         assertThat(saved.getUserAgent()).isNull();
+    }
+
+    @Test
+    void search_passesFiltersThrough_andMapsEntitiesToResponses() {
+        Pageable pageable = PageRequest.of(0, 10);
+        UUID actorId = UUID.randomUUID();
+        User actor = new User(actorId, "alice@example.com", "h", UserStatus.ACTIVE);
+        AuditEvent event = new AuditEvent(
+                UUID.randomUUID(), actor, AuditEventType.JOB_CREATED,
+                "Job", UUID.randomUUID(), "{}", "10.0.0.1", "curl/8.0");
+        event.setCreatedAt(OffsetDateTime.now());
+        Page<AuditEvent> page = new PageImpl<>(List.of(event), pageable, 1);
+
+        when(auditEventRepository.search(
+                eq(AuditEventType.JOB_CREATED), eq(actorId),
+                isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
+
+        Page<AuditEventResponse> result = auditEventService.search(
+                AuditEventType.JOB_CREATED, actorId, null, null, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        AuditEventResponse response = result.getContent().get(0);
+        assertThat(response.eventType()).isEqualTo(AuditEventType.JOB_CREATED);
+        assertThat(response.actorUserId()).isEqualTo(actorId);
+        assertThat(response.actorEmail()).isEqualTo("alice@example.com");
     }
 }
