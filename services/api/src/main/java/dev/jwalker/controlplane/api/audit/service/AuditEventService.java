@@ -4,6 +4,7 @@ import dev.jwalker.controlplane.api.audit.model.AuditEvent;
 import dev.jwalker.controlplane.api.audit.model.AuditEventType;
 import dev.jwalker.controlplane.api.audit.repository.AuditEventRepository;
 import dev.jwalker.controlplane.api.audit.web.dto.AuditEventResponse;
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -75,7 +77,15 @@ public class AuditEventService {
             UUID actorUserId,
             String targetType,
             UUID targetId,
-            Pageable pageable) {
+            Pageable pageable,
+            AuthenticatedCaller caller) {
+        // Audit data is sensitive — exposes who did what, when, from where.
+        // Only OPERATOR and ADMIN are trusted to read it. USER role gets 403
+        // via Spring Security's default access-denied handling, which
+        // recognizes AccessDeniedException thrown during request processing.
+        if (!caller.isPrivileged()) {
+            throw new AccessDeniedException("Audit access requires OPERATOR or ADMIN role");
+        }
         return auditEventRepository.search(eventType, actorUserId, targetType, targetId, pageable)
                 .map(AuditEventResponse::from);
     }

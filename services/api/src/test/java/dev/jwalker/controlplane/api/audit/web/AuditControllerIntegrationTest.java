@@ -167,9 +167,43 @@ class AuditControllerIntegrationTest {
                 .andExpect(jsonPath("$.content[0].actorEmail").value("alice@example.com"));
     }
 
+    @Test
+    void list_byUserRole_returns403() throws Exception {
+        seedUserWithRole("normal@example.com", "password", "USER");
+        String accessToken = loginAndExtractAccess("normal@example.com", "password");
+
+        mockMvc.perform(get("/api/audit")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listForTarget_byUserRole_returns403() throws Exception {
+        seedUserWithRole("normal@example.com", "password", "USER");
+        String accessToken = loginAndExtractAccess("normal@example.com", "password");
+
+        mockMvc.perform(get("/api/audit/target/Job/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void list_byAdminRole_returns200() throws Exception {
+        seedUserWithRole("admin@example.com", "password", "ADMIN");
+        String accessToken = loginAndExtractAccess("admin@example.com", "password");
+
+        mockMvc.perform(get("/api/audit")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+    }
+
     private void seedUser(String email, String rawPassword) {
-        Role role = roleRepository.findByName("USER")
-                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, "USER")));
+        seedUserWithRole(email, rawPassword, "OPERATOR");
+    }
+
+    private void seedUserWithRole(String email, String rawPassword, String roleName) {
+        Role role = roleRepository.findByName(roleName)
+                .orElseGet(() -> roleRepository.saveAndFlush(new Role(null, roleName)));
         User user = new User(null, email, passwordEncoder.encode(rawPassword), UserStatus.ACTIVE);
         user.addRole(role);
         userRepository.saveAndFlush(user);

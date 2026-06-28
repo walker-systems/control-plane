@@ -1,21 +1,25 @@
 package dev.jwalker.controlplane.api.audit.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import dev.jwalker.controlplane.api.audit.model.AuditEvent;
 import dev.jwalker.controlplane.api.audit.model.AuditEventType;
 import dev.jwalker.controlplane.api.audit.repository.AuditEventRepository;
 import dev.jwalker.controlplane.api.audit.web.dto.AuditEventResponse;
+import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +34,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -216,13 +221,43 @@ class AuditEventServiceTest {
                 isNull(), isNull(), eq(pageable)))
                 .thenReturn(page);
 
+        AuthenticatedCaller operatorCaller =
+                new AuthenticatedCaller(UUID.randomUUID(), Set.of("OPERATOR"));
         Page<AuditEventResponse> result = auditEventService.search(
-                AuditEventType.JOB_CREATED, actorId, null, null, pageable);
+                AuditEventType.JOB_CREATED, actorId, null, null, pageable, operatorCaller);
 
         assertThat(result.getTotalElements()).isEqualTo(1);
         AuditEventResponse response = result.getContent().get(0);
         assertThat(response.eventType()).isEqualTo(AuditEventType.JOB_CREATED);
         assertThat(response.actorUserId()).isEqualTo(actorId);
         assertThat(response.actorEmail()).isEqualTo("alice@example.com");
+    }
+
+    @Test
+    void search_throwsAccessDenied_forUserCaller() {
+        AuthenticatedCaller userCaller =
+                new AuthenticatedCaller(UUID.randomUUID(), Set.of("USER"));
+
+        assertThatThrownBy(() -> auditEventService.search(
+                null, null, null, null, Pageable.unpaged(), userCaller))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("OPERATOR or ADMIN");
+
+        org.mockito.Mockito.verify(auditEventRepository, never())
+                .search(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void search_succeeds_forAdminCaller() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<AuditEvent> empty = new PageImpl<>(List.of(), pageable, 0);
+        when(auditEventRepository.search(isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(empty);
+
+        AuthenticatedCaller adminCaller =
+                new AuthenticatedCaller(UUID.randomUUID(), Set.of("ADMIN"));
+
+        assertThat(auditEventService.search(null, null, null, null, pageable, adminCaller)
+                .getTotalElements()).isZero();
     }
 }
