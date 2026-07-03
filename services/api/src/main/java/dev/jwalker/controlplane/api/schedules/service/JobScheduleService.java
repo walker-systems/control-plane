@@ -12,11 +12,8 @@ import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleResponse;
 import dev.jwalker.controlplane.api.schedules.web.dto.JobScheduleUpdateRequest;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
-import java.time.DateTimeException;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.temporal.Temporal;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,9 +42,9 @@ public class JobScheduleService {
                 .orElseThrow(() -> new IllegalStateException(
                         "Authenticated user not found: " + ownerId));
 
-        CronExpression cron = parseCron(request.cron());
-        ZoneId zone = parseTimezone(request.timezone());
-        OffsetDateTime nextRunAt = computeNextRunAt(cron, zone);
+        CronExpression cron = ScheduleCronCalculator.parseCron(request.cron());
+        ZoneId zone = ScheduleCronCalculator.parseZone(request.timezone());
+        OffsetDateTime nextRunAt = ScheduleCronCalculator.nextAfter(cron, zone, OffsetDateTime.now());
 
         JobSchedule schedule = new JobSchedule(
                 null,
@@ -76,26 +73,6 @@ public class JobScheduleService {
             throw new InvalidScheduleConfigException(
                     InvalidScheduleConfigException.Reason.DUPLICATE_NAME,
                     "A schedule named '" + request.name() + "' already exists for this owner");
-        }
-    }
-
-    private static CronExpression parseCron(String expression) {
-        try {
-            return CronExpression.parse(expression);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidScheduleConfigException(
-                    InvalidScheduleConfigException.Reason.INVALID_CRON,
-                    "Invalid cron expression: " + expression);
-        }
-    }
-
-    private static ZoneId parseTimezone(String timezone) {
-        try {
-            return ZoneId.of(timezone);
-        } catch (DateTimeException e) {
-            throw new InvalidScheduleConfigException(
-                    InvalidScheduleConfigException.Reason.INVALID_TIMEZONE,
-                    "Invalid timezone: " + timezone);
         }
     }
 
@@ -174,18 +151,18 @@ public class JobScheduleService {
             s.setMaxRetries(request.maxRetries());
         }
         if (request.cron() != null) {
-            parsedCron = parseCron(request.cron());
+            parsedCron = ScheduleCronCalculator.parseCron(request.cron());
             s.setCronExpression(request.cron());
         }
         if (request.timezone() != null) {
-            parsedZone = parseTimezone(request.timezone());
+            parsedZone = ScheduleCronCalculator.parseZone(request.timezone());
             s.setTimezone(request.timezone());
         }
 
         if ((parsedCron != null || parsedZone != null) && s.isEnabled()) {
-            CronExpression cron = parsedCron != null ? parsedCron : parseCron(s.getCronExpression());
-            ZoneId zone = parsedZone != null ? parsedZone : parseTimezone(s.getTimezone());
-            s.setNextRunAt(computeNextRunAt(cron, zone));
+            CronExpression cron = parsedCron != null ? parsedCron : ScheduleCronCalculator.parseCron(s.getCronExpression());
+            ZoneId zone = parsedZone != null ? parsedZone : ScheduleCronCalculator.parseZone(s.getTimezone());
+            s.setNextRunAt(ScheduleCronCalculator.nextAfter(cron, zone, OffsetDateTime.now()));
         }
 
         s.touch();
@@ -237,10 +214,10 @@ public class JobScheduleService {
         }
         JobSchedule s = opt.get();
         if (!s.isEnabled()) {
-            CronExpression cron = parseCron(s.getCronExpression());
-            ZoneId zone = parseTimezone(s.getTimezone());
+            CronExpression cron = ScheduleCronCalculator.parseCron(s.getCronExpression());
+            ZoneId zone = ScheduleCronCalculator.parseZone(s.getTimezone());
             s.enable();
-            s.setNextRunAt(computeNextRunAt(cron, zone));
+            s.setNextRunAt(ScheduleCronCalculator.nextAfter(cron, zone, OffsetDateTime.now()));
             jobScheduleRepository.save(s);
             auditEventService.record(
                     AuditEventType.SCHEDULE_RESUMED,
@@ -249,12 +226,6 @@ public class JobScheduleService {
                     Map.of("name", s.getName()));
         }
         return Optional.of(JobScheduleResponse.from(s));
-    }
-
-    static OffsetDateTime computeNextRunAt(CronExpression cron, ZoneId zone) {
-        ZonedDateTime now = ZonedDateTime.now(zone);
-        Temporal next = cron.next(now);
-        return next == null ? null : ((ZonedDateTime) next).toOffsetDateTime();
     }
 
     private static boolean canAccess(JobSchedule schedule, AuthenticatedCaller caller) {
