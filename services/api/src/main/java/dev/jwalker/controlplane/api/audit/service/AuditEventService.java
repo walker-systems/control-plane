@@ -137,16 +137,28 @@ public class AuditEventService {
         return null;
     }
 
+    // Matches audit_events.ip_address VARCHAR(64). Audit writes join the
+    // caller's transaction (REQUIRED), so a malformed/oversized forwarded
+    // header must not be able to fail the insert and roll back the whole op.
+    private static final int IP_MAX_LEN = 64;
+
     private static String currentIpAddressOrNull() {
         HttpServletRequest req = currentRequestOrNull();
         if (req == null) {
             return null;
         }
         String forwarded = req.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        String raw = (forwarded != null && !forwarded.isBlank())
+                ? forwarded.split(",")[0].trim()
+                : req.getRemoteAddr();
+        return truncate(raw, IP_MAX_LEN);
+    }
+
+    private static String truncate(String value, int maxLen) {
+        if (value == null) {
+            return null;
         }
-        return req.getRemoteAddr();
+        return value.length() > maxLen ? value.substring(0, maxLen) : value;
     }
 
     private static String currentUserAgentOrNull() {

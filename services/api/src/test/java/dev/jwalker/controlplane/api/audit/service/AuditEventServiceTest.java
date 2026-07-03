@@ -192,6 +192,24 @@ class AuditEventServiceTest {
     }
 
     @Test
+    void recordWithActor_truncatesOversizedForwardedIp() {
+        when(auditEventRepository.save(any(AuditEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        String oversized = "a".repeat(200);
+        MockHttpServletRequest mockReq = new MockHttpServletRequest();
+        mockReq.setRemoteAddr("10.0.0.1");
+        mockReq.addHeader("X-Forwarded-For", oversized);
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(mockReq));
+
+        auditEventService.recordWithActor(
+                AuditEventType.LOGIN_FAILED, null, null, null, Map.of());
+
+        ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+        org.mockito.Mockito.verify(auditEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getIpAddress()).hasSize(64);
+    }
+
+    @Test
     void recordWithActor_ipAndUserAgentNullOutsideRequest() {
         when(auditEventRepository.save(any(AuditEvent.class))).thenAnswer(inv -> inv.getArgument(0));
 
