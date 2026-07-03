@@ -1,5 +1,7 @@
 package dev.jwalker.controlplane.api.jobs.service;
 
+import dev.jwalker.controlplane.api.audit.model.AuditEventType;
+import dev.jwalker.controlplane.api.audit.service.AuditEventService;
 import dev.jwalker.controlplane.api.auth.service.AuthenticatedCaller;
 import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
@@ -10,6 +12,7 @@ import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,7 @@ public class JobService {
 
     private final JobRepository jobRepository;
     private final UserRepository userRepository;
+    private final AuditEventService auditEventService;
 
     @Transactional
     public JobResponse create(UUID ownerId, JobCreateRequest request) {
@@ -45,7 +49,15 @@ public class JobService {
                 request.idempotencyKey(),
                 request.maxRetries() == null ? DEFAULT_MAX_RETRIES : request.maxRetries());
 
-        return JobResponse.from(jobRepository.save(job));
+        Job saved = jobRepository.save(job);
+        auditEventService.record(
+                AuditEventType.JOB_CREATED,
+                "Job",
+                saved.getId(),
+                Map.of(
+                        "type", saved.getType().name(),
+                        "priority", saved.getPriority().name()));
+        return JobResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -82,9 +94,16 @@ public class JobService {
                     JobStateException.Reason.CANNOT_CANCEL,
                     "Cannot cancel job in status " + job.getStatus());
         }
+        JobStatus previous = job.getStatus();
         job.setStatus(JobStatus.CANCELLED);
         job.touch();
-        return Optional.of(JobResponse.from(jobRepository.save(job)));
+        Job saved = jobRepository.save(job);
+        auditEventService.record(
+                AuditEventType.JOB_CANCELLED,
+                "Job",
+                saved.getId(),
+                Map.of("previousStatus", previous.name()));
+        return Optional.of(JobResponse.from(saved));
     }
 
     @Transactional
@@ -100,9 +119,16 @@ public class JobService {
                     JobStateException.Reason.CANNOT_RETRY,
                     "Cannot retry job in status " + job.getStatus());
         }
+        JobStatus previous = job.getStatus();
         job.setStatus(JobStatus.PENDING);
         job.touch();
-        return Optional.of(JobResponse.from(jobRepository.save(job)));
+        Job saved = jobRepository.save(job);
+        auditEventService.record(
+                AuditEventType.JOB_RETRIED,
+                "Job",
+                saved.getId(),
+                Map.of("previousStatus", previous.name()));
+        return Optional.of(JobResponse.from(saved));
     }
 
     private static boolean canAccess(Job job, AuthenticatedCaller caller) {
