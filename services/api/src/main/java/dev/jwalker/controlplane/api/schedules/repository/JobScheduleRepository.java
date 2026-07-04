@@ -52,21 +52,21 @@ public interface JobScheduleRepository extends JpaRepository<JobSchedule, UUID> 
     Optional<JobSchedule> findByIdWithOwner(@Param("id") UUID id);
 
     @Query(
-            value = """
-                    SELECT s FROM JobSchedule s
-                    LEFT JOIN FETCH s.owner
-                    WHERE (:enabled IS NULL OR s.enabled = :enabled)
-                      AND (:type IS NULL OR s.type = :type)
-                      AND (:priority IS NULL OR s.priority = :priority)
-                      AND (:ownerId IS NULL OR s.owner.id = :ownerId)
-                    """,
-            countQuery = """
-                    SELECT COUNT(s) FROM JobSchedule s
-                    WHERE (:enabled IS NULL OR s.enabled = :enabled)
-                      AND (:type IS NULL OR s.type = :type)
-                      AND (:priority IS NULL OR s.priority = :priority)
-                      AND (:ownerId IS NULL OR s.owner.id = :ownerId)
-                    """)
+      value = """
+              SELECT s FROM JobSchedule s
+              LEFT JOIN FETCH s.owner
+              WHERE (:enabled IS NULL OR s.enabled = :enabled)
+                AND (:type IS NULL OR s.type = :type)
+                AND (:priority IS NULL OR s.priority = :priority)
+                AND (:ownerId IS NULL OR s.owner.id = :ownerId)
+              """,
+      countQuery = """
+              SELECT COUNT(s) FROM JobSchedule s
+              WHERE (:enabled IS NULL OR s.enabled = :enabled)
+                AND (:type IS NULL OR s.type = :type)
+                AND (:priority IS NULL OR s.priority = :priority)
+                AND (:ownerId IS NULL OR s.owner.id = :ownerId)
+              """)
     Page<JobSchedule> search(
             @Param("enabled") Boolean enabled,
             @Param("type") JobType type,
