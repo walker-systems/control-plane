@@ -59,4 +59,8 @@ app:
     enabled: ${BOOTSTRAP_ENABLED:false}
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  scheduling:
+    enabled: ${SCHEDULING_ENABLED:true}
+    tick-interval-ms: ${SCHEDULING_TICK_INTERVAL_MS:30000}
+    batch-size: ${SCHEDULING_BATCH_SIZE:50}
 
