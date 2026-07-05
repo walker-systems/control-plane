@@ -5,13 +5,17 @@ import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.users.model.User;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface JobRepository extends JpaRepository<Job, UUID> {
@@ -54,4 +58,18 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
             @Param("ownerId") UUID ownerId,
             @Param("sourceScheduleId") UUID sourceScheduleId,
             Pageable pageable);
+
+    // Locks each returned job with FOR UPDATE SKIP LOCKED so parallel
+    // executor invocations pick disjoint slices without blocking. Ordering
+    // is priority-desc first (HIGH before LOW) then created_at-asc so
+    // within a priority band it's FIFO. Same -2 hint trick as the
+    // schedule repo for SKIP LOCKED semantics.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
+    @Query("""
+    select j from Job j
+    where j.status = dev.jwalker.controlplane.api.jobs.model.JobStatus.PENDING
+    order by j.priority desc, j.createdAt asc
+    """)
+    List<Job> findPendingForUpdate(Pageable pageable);
 }
