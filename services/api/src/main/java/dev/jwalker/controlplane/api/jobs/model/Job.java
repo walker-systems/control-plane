@@ -66,6 +66,13 @@ public class Job {
     @Column(name = "max_retries", nullable = false)
     private int maxRetries;
 
+    // Gates executor pickup — set to now() on create, pushed into the future
+    // on retry so backoff isn't a busy-wait. Column is NOT NULL at the DB
+    // level; @PrePersist defaults it here so existing callers that don't
+    // set it don't have to change.
+    @Column(name = "available_at", nullable = false)
+    private OffsetDateTime availableAt;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -106,6 +113,9 @@ public class Job {
         }
         if (updatedAt == null) {
             updatedAt = now;
+        }
+        if (availableAt == null) {
+            availableAt = now;
         }
     }
 

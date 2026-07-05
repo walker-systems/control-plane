@@ -9,6 +9,7 @@ import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -47,8 +48,8 @@ public class JobExecutor {
 
     @Transactional
     public int processPending() {
-        List<Job> pending = jobRepository.findPendingForUpdate(PageRequest.of(0, batchSize));
         OffsetDateTime now = OffsetDateTime.now(clock);
+        List<Job> pending = jobRepository.findPendingForUpdate(now, PageRequest.of(0, batchSize));
         for (Job job : pending) {
             processOne(job, now);
         }
@@ -85,9 +86,22 @@ public class JobExecutor {
             // transaction, undoing prior jobs' successful transitions.
             String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             exec.markFailed(errorMessage);
-            job.setStatus(JobStatus.FAILED);
-            job.touch();
             emitFailed(job, attemptNumber, errorMessage);
+
+            // maxRetries is "retries after the first attempt," so with
+            // maxRetries=3 attempts 1..3 retry and attempt 4 dead-letters.
+            // Jobs with maxRetries=0 skip the retry branch entirely and go
+            // straight to DEAD_LETTER on the first failure.
+            if (attemptNumber <= job.getMaxRetries()) {
+                Duration backoff = JobBackoffPolicy.computeBackoff(attemptNumber);
+                job.setStatus(JobStatus.PENDING);
+                job.setAvailableAt(now.plus(backoff));
+                job.touch();
+            } else {
+                job.setStatus(JobStatus.DEAD_LETTER);
+                job.touch();
+                emitDeadLettered(job, attemptNumber, "max_retries_exceeded");
+            }
         }
     }
 

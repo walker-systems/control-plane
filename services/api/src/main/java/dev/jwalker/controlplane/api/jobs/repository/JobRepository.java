@@ -7,6 +7,7 @@ import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.users.model.User;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,12 +65,17 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     // is priority-desc first (HIGH before LOW) then created_at-asc so
     // within a priority band it's FIFO. Same -2 hint trick as the
     // schedule repo for SKIP LOCKED semantics.
+    //
+    // The availableAt gate holds retry-delayed jobs out of the batch until
+    // their backoff elapses; freshly created jobs default availableAt = now
+    // so they're immediately eligible.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("""
     select j from Job j
     where j.status = dev.jwalker.controlplane.api.jobs.model.JobStatus.PENDING
+      and j.availableAt <= :cutoff
     order by j.priority desc, j.createdAt asc
     """)
-    List<Job> findPendingForUpdate(Pageable pageable);
+    List<Job> findPendingForUpdate(@Param("cutoff") OffsetDateTime cutoff, Pageable pageable);
 }

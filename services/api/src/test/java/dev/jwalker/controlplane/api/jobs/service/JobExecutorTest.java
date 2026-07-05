@@ -21,7 +21,9 @@ import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -86,7 +88,9 @@ class JobExecutorTest {
     }
 
     @Test
-    void processPending_marksJobFailed_whenHandlerThrows() throws Exception {
+    void processPending_retriesFailedJob_withExponentialBackoff() throws Exception {
+        // maxRetries=3, attempt 1 fails → job goes back to PENDING with
+        // availableAt = now + 20s (base 10s * 2^1). No DEAD_LETTER yet.
         Job job = pendingJob();
         stubPending(List.of(job));
         stubPriorExecutions(job, 0);
@@ -96,21 +100,44 @@ class JobExecutorTest {
 
         executor.processPending();
 
-        assertThat(job.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(job.getStatus()).isEqualTo(JobStatus.PENDING);
+        OffsetDateTime expectedAvailableAt =
+                OffsetDateTime.ofInstant(FIXED_NOW, ZoneOffset.UTC).plus(Duration.ofSeconds(20));
+        assertThat(job.getAvailableAt()).isEqualTo(expectedAvailableAt);
 
         ArgumentCaptor<JobExecution> execCap = ArgumentCaptor.forClass(JobExecution.class);
         verify(jobExecutionRepository).save(execCap.capture());
-        JobExecution exec = execCap.getValue();
-        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.FAILED);
-        assertThat(exec.getErrorMessage()).isEqualTo("boom");
+        assertThat(execCap.getValue().getStatus()).isEqualTo(JobExecutionStatus.FAILED);
+        assertThat(execCap.getValue().getErrorMessage()).isEqualTo("boom");
 
         verify(auditEventService).recordWithActor(
                 eq(AuditEventType.JOB_STARTED), isNull(), eq("Job"), eq(job.getId()), any());
         verify(auditEventService).recordWithActor(
                 eq(AuditEventType.JOB_FAILED), isNull(), eq("Job"), eq(job.getId()), any());
-        // Commit 1: no retry / no DEAD_LETTER escalation on a plain failure.
+        // Not yet exhausted — no DEAD_LETTER emission on this attempt.
         verify(auditEventService, never()).recordWithActor(
                 eq(AuditEventType.JOB_DEAD_LETTERED), any(), any(), any(), any());
+    }
+
+    @Test
+    void processPending_deadLettersJob_whenRetriesExhausted() throws Exception {
+        // maxRetries=3, 3 prior FAILED executions → next attempt is #4.
+        // Handler throws → 4 <= 3 is false → DEAD_LETTER.
+        Job job = pendingJob();
+        stubPending(List.of(job));
+        stubPriorExecutions(job, 3);
+        when(handlerRegistry.handlerFor(job.getType())).thenReturn(Optional.of(handler));
+        when(handler.handle(job)).thenThrow(new RuntimeException("boom"));
+        stubSaveExecutionEchoesArgument();
+
+        executor.processPending();
+
+        assertThat(job.getStatus()).isEqualTo(JobStatus.DEAD_LETTER);
+
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_FAILED), isNull(), eq("Job"), eq(job.getId()), any());
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_DEAD_LETTERED), isNull(), eq("Job"), eq(job.getId()), any());
     }
 
     @Test
@@ -199,7 +226,8 @@ class JobExecutorTest {
     }
 
     private void stubPending(List<Job> jobs) {
-        when(jobRepository.findPendingForUpdate(any(Pageable.class))).thenReturn(jobs);
+        when(jobRepository.findPendingForUpdate(any(OffsetDateTime.class), any(Pageable.class)))
+                .thenReturn(jobs);
     }
 
     private void stubPriorExecutions(Job job, int count) {
