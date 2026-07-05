@@ -114,7 +114,7 @@ public class JobService {
             return Optional.empty();
         }
         Job job = jobOpt.get();
-        if (job.getStatus() != JobStatus.FAILED && job.getStatus() != JobStatus.DEAD_LETTER) {
+        if (job.getStatus() != JobStatus.DEAD_LETTER) {
             throw new JobStateException(
                     JobStateException.Reason.CANNOT_RETRY,
                     "Cannot retry job in status " + job.getStatus());

@@ -230,10 +230,10 @@ class JobServiceTest {
     }
 
     @Test
-    void retry_transitionsFailedToPending_whenCallerIsOwner() {
+    void retry_transitionsDeadLetterToPending_whenCallerIsOwner() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
+                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
         job.setCreatedAt(OffsetDateTime.now());
         job.setUpdatedAt(OffsetDateTime.now());
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
@@ -252,7 +252,7 @@ class JobServiceTest {
     void retry_succeeds_whenCallerIsOperator() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
+                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
         job.setCreatedAt(OffsetDateTime.now());
         job.setUpdatedAt(OffsetDateTime.now());
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
@@ -265,7 +265,7 @@ class JobServiceTest {
     void retry_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
-                JobStatus.FAILED, JobPriority.MEDIUM, null, 3);
+                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
         when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
 
         assertThat(jobService.retry(jobId, otherUserCaller)).isEmpty();

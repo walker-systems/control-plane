@@ -366,10 +366,10 @@ class JobControllerIntegrationTest {
     }
 
     @Test
-    void retry_failedJob_returnsPendingJob() throws Exception {
+    void retry_deadLetteredJob_returnsPendingJob() throws Exception {
         seedUser("alice@example.com", "password");
         String accessToken = loginAndExtractAccess("alice@example.com", "password");
-        Job seeded = seedJob("alice@example.com", JobStatus.FAILED);
+        Job seeded = seedJob("alice@example.com", JobStatus.DEAD_LETTER);
 
         mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/retry")
                         .header("Authorization", "Bearer " + accessToken))
@@ -501,7 +501,7 @@ class JobControllerIntegrationTest {
         seedUserWithRole("ops@example.com", "password", "OPERATOR");
         String opsToken = loginAndExtractAccess("ops@example.com", "password");
 
-        Job seeded = seedJob("alice@example.com", JobStatus.FAILED);
+        Job seeded = seedJob("alice@example.com", JobStatus.DEAD_LETTER);
 
         mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/retry")
                         .header("Authorization", "Bearer " + opsToken))
