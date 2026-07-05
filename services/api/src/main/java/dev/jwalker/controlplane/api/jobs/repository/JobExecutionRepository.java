@@ -18,4 +18,9 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, UUID
     Optional<JobExecution> findFirstByJobOrderByAttemptNumberDesc(Job job);
 
     List<JobExecution> findByStatus(JobExecutionStatus status);
+
+    // Attempt lookup by job + attempt number — attempt numbers are unique
+    // per job (uq_job_executions_job_attempt in V4), so this returns
+    // at most one row.
+    Optional<JobExecution> findByJob_IdAndAttemptNumber(UUID jobId, int attemptNumber);
 }
