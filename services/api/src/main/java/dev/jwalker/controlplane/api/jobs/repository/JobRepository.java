@@ -61,10 +61,13 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
             Pageable pageable);
 
     // Locks each returned job with FOR UPDATE SKIP LOCKED so parallel
-    // executor invocations pick disjoint slices without blocking. Ordering
-    // is priority-desc first (HIGH before LOW) then created_at-asc so
-    // within a priority band it's FIFO. Same -2 hint trick as the
-    // schedule repo for SKIP LOCKED semantics.
+    // executor invocations pick disjoint slices without blocking. Same -2
+    // hint trick as the schedule repo for SKIP LOCKED semantics.
+    //
+    // Ordering: HIGH before MEDIUM before LOW, then FIFO by createdAt within
+    // a priority. Priority is stored as VARCHAR (@Enumerated STRING) so a
+    // naive `order by priority desc` would sort alphabetically — MEDIUM,
+    // LOW, HIGH — not by logical priority. The CASE forces a real ordering.
     //
     // The availableAt gate holds retry-delayed jobs out of the batch until
     // their backoff elapses; freshly created jobs default availableAt = now
@@ -75,7 +78,13 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     select j from Job j
     where j.status = dev.jwalker.controlplane.api.jobs.model.JobStatus.PENDING
       and j.availableAt <= :cutoff
-    order by j.priority desc, j.createdAt asc
+    order by
+        case j.priority
+            when dev.jwalker.controlplane.api.jobs.model.JobPriority.HIGH then 3
+            when dev.jwalker.controlplane.api.jobs.model.JobPriority.MEDIUM then 2
+            else 1
+        end desc,
+        j.createdAt asc
     """)
     List<Job> findPendingForUpdate(@Param("cutoff") OffsetDateTime cutoff, Pageable pageable);
 }

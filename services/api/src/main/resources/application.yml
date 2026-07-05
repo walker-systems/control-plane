@@ -63,4 +63,8 @@ app:
     enabled: ${SCHEDULING_ENABLED:true}
     tick-interval-ms: ${SCHEDULING_TICK_INTERVAL_MS:30000}
     batch-size: ${SCHEDULING_BATCH_SIZE:50}
+  executor:
+    enabled: ${EXECUTOR_ENABLED:true}
+    tick-interval-ms: ${EXECUTOR_TICK_INTERVAL_MS:5000}
+    batch-size: ${EXECUTOR_BATCH_SIZE:10}
 
