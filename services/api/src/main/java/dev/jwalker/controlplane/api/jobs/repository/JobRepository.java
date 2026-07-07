@@ -34,6 +34,16 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     @Query("SELECT j FROM Job j LEFT JOIN FETCH j.owner WHERE j.id = :id")
     Optional<Job> findByIdWithRelations(@Param("id") UUID id);
 
+    // Locking read for cancel — waits for any concurrent executor
+    // transaction on this row to commit before returning. Without this,
+    // cancel's non-locking read could see a stale PENDING status while
+    // the executor is mid-processing, then blindly overwrite the
+    // executor's committed SUCCEEDED / retry / DEAD_LETTER outcome.
+    // No skip-locked hint here: we WANT to wait, not skip.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT j FROM Job j LEFT JOIN FETCH j.owner WHERE j.id = :id")
+    Optional<Job> findByIdWithRelationsForUpdate(@Param("id") UUID id);
+
     @Query(
             value = """
                     SELECT j FROM Job j
