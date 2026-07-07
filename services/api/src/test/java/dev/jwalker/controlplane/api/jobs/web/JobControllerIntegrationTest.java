@@ -240,6 +240,21 @@ class JobControllerIntegrationTest {
     }
 
     @Test
+    void create_withMaxRetriesAbove20_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobCreateRequest body = new JobCreateRequest(
+                JobType.CRM_SYNC, "{}", JobPriority.MEDIUM, 21, null);
+
+        mockMvc.perform(post("/api/jobs")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void get_withMalformedId_returns400() throws Exception {
         seedUser("alice@example.com", "password");
         String accessToken = loginAndExtractAccess("alice@example.com", "password");

@@ -135,6 +135,27 @@ class JobExecutionControllerIntegrationTest {
     }
 
     @Test
+    void list_capsResponseAt100Executions() throws Exception {
+        seedUser("alice@example.com", "password");
+        String token = loginAndExtractAccess("alice@example.com", "password");
+        Job job = seedJob("alice@example.com", JobStatus.SUCCEEDED);
+        // Seed 105 executions — over the 100-row response cap. This can
+        // happen when a job has been through many /retry cycles.
+        for (int attempt = 1; attempt <= 105; attempt++) {
+            seedExecution(job, attempt, JobExecutionStatus.SUCCEEDED);
+        }
+
+        mockMvc.perform(get("/api/jobs/" + job.getId() + "/executions")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(100))
+                // Cap keeps the earliest attempts — the first 100 by
+                // attemptNumber ASC. Attempt 100 is included; 101–105 aren't.
+                .andExpect(jsonPath("$[0].attemptNumber").value(1))
+                .andExpect(jsonPath("$[99].attemptNumber").value(100));
+    }
+
+    @Test
     void list_byNonOwnerUnprivileged_returns404() throws Exception {
         seedUser("alice@example.com", "password");
         seedUser("bob@example.com", "password");

@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +18,11 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, UUID
     List<JobExecution> findByJob(Job job);
 
     List<JobExecution> findByJobOrderByAttemptNumberAsc(Job job);
+
+    // Bounded variant of the ordered lookup. The executions endpoint uses
+    // this with PageRequest.of(0, 100) so responses stay small even for
+    // jobs that have been through many /retry cycles.
+    List<JobExecution> findByJobOrderByAttemptNumberAsc(Job job, Pageable pageable);
 
     Optional<JobExecution> findFirstByJobOrderByAttemptNumberDesc(Job job);
 

@@ -9,12 +9,19 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class JobExecutionService {
+
+    // Response cap for the executions endpoint. maxRetries is capped at 20
+    // by JobCreateRequest, so 21 rows per lifecycle. This 100-row limit
+    // absorbs several /retry cycles worth of executions before truncating,
+    // while keeping a single response bounded.
+    private static final int MAX_EXECUTIONS_PER_RESPONSE = 100;
 
     private final JobRepository jobRepository;
     private final JobExecutionRepository jobExecutionRepository;
@@ -28,7 +35,8 @@ public class JobExecutionService {
     public Optional<List<JobExecutionResponse>> findAllForJob(UUID jobId, AuthenticatedCaller caller) {
         return jobRepository.findByIdWithRelations(jobId)
                 .filter(job -> canAccess(job, caller))
-                .map(job -> jobExecutionRepository.findByJobOrderByAttemptNumberAsc(job).stream()
+                .map(job -> jobExecutionRepository.findByJobOrderByAttemptNumberAsc(
+                                job, PageRequest.of(0, MAX_EXECUTIONS_PER_RESPONSE)).stream()
                         .map(JobExecutionResponse::from)
                         .toList());
     }
