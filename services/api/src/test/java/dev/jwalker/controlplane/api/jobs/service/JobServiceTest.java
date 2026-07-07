@@ -15,6 +15,8 @@ import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
+import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
+import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository.JobAttemptCount;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
@@ -43,6 +45,9 @@ class JobServiceTest {
 
     @Mock
     private JobRepository jobRepository;
+
+    @Mock
+    private JobExecutionRepository jobExecutionRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -319,6 +324,70 @@ class JobServiceTest {
         jobService.search(null, null, null, someoneElse, null, pageable, operatorCaller);
 
         verify(jobRepository).search(null, null, null, someoneElse, null, pageable);
+    }
+
+    @Test
+    void create_returnsResponseWithZeroAttemptCount() {
+        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(jobRepository.save(any(Job.class))).thenAnswer(inv -> {
+            Job j = inv.getArgument(0);
+            j.setId(UUID.randomUUID());
+            j.setAvailableAt(OffsetDateTime.now());
+            return j;
+        });
+
+        JobResponse response = jobService.create(
+                owner.getId(),
+                new JobCreateRequest(JobType.CRM_SYNC, "{}", null, null, null));
+
+        assertThat(response.attemptCount()).isZero();
+        assertThat(response.availableAt()).isNotNull();
+        // A fresh job never queries the executions repo for its own count.
+        verify(jobExecutionRepository, never()).countByJob_Id(any());
+    }
+
+    @Test
+    void findById_populatesAttemptCountFromRepository() {
+        UUID jobId = UUID.randomUUID();
+        Job job = pendingJob(jobId);
+        job.setAvailableAt(OffsetDateTime.now());
+        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobExecutionRepository.countByJob_Id(jobId)).thenReturn(2L);
+
+        JobResponse response = jobService.findById(jobId, ownerCaller).orElseThrow();
+
+        assertThat(response.attemptCount()).isEqualTo(2L);
+        assertThat(response.availableAt()).isEqualTo(job.getAvailableAt());
+    }
+
+    @Test
+    void search_bulkFetchesAttemptCountsAndMapsPerJob() {
+        Pageable pageable = PageRequest.of(0, 10);
+        UUID jobIdA = UUID.randomUUID();
+        UUID jobIdB = UUID.randomUUID();
+        Job jobA = pendingJob(jobIdA);
+        Job jobB = pendingJob(jobIdB);
+        Page<Job> page = new PageImpl<>(List.of(jobA, jobB), pageable, 2);
+        when(jobRepository.search(null, null, null, owner.getId(), null, pageable))
+                .thenReturn(page);
+
+        JobAttemptCount countForA = org.mockito.Mockito.mock(JobAttemptCount.class);
+        when(countForA.getJobId()).thenReturn(jobIdA);
+        when(countForA.getAttemptCount()).thenReturn(3L);
+        // Job B has no execution rows — omitted from grouped-count results.
+        when(jobExecutionRepository.countAttemptsByJobIds(List.of(jobIdA, jobIdB)))
+                .thenReturn(List.of(countForA));
+
+        Page<JobResponse> result = jobService.search(
+                null, null, null, null, null, pageable, ownerCaller);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).id()).isEqualTo(jobIdA);
+        assertThat(result.getContent().get(0).attemptCount()).isEqualTo(3L);
+        assertThat(result.getContent().get(1).id()).isEqualTo(jobIdB);
+        assertThat(result.getContent().get(1).attemptCount()).isZero();
+        // Single bulk query — no per-job COUNT calls.
+        verify(jobExecutionRepository, never()).countByJob_Id(any());
     }
 
     private Job pendingJob(UUID jobId) {

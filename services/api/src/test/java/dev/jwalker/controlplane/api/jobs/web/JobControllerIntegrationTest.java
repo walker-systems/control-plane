@@ -10,9 +10,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import dev.jwalker.controlplane.api.auth.web.dto.LoginRequest;
 import dev.jwalker.controlplane.api.jobs.model.Job;
+import dev.jwalker.controlplane.api.jobs.model.JobExecution;
+import dev.jwalker.controlplane.api.jobs.model.JobExecutionStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
+import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.schedules.model.JobSchedule;
@@ -68,6 +71,9 @@ class JobControllerIntegrationTest {
     private JobRepository jobRepository;
 
     @Autowired
+    private JobExecutionRepository jobExecutionRepository;
+
+    @Autowired
     private JobScheduleRepository jobScheduleRepository;
 
     @Autowired
@@ -83,6 +89,8 @@ class JobControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // job_executions has FK to jobs — must clear first.
+        jobExecutionRepository.deleteAll();
         jobRepository.deleteAll();
         // Raw SQL bypasses @SQLRestriction so soft-deleted schedules from
         // prior tests get hard-deleted, otherwise the FK to users blocks
@@ -198,6 +206,27 @@ class JobControllerIntegrationTest {
                 .andExpect(jsonPath("$.type").value("CUSTOMER_EXPORT"))
                 .andExpect(jsonPath("$.priority").value("HIGH"))
                 .andExpect(jsonPath("$.idempotencyKey").value("idem-99"));
+    }
+
+    @Test
+    void get_returnsAttemptCountAndAvailableAtFromRealDb() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        Job seeded = seedJob("alice@example.com", JobStatus.SUCCEEDED);
+        seedExecution(seeded, 1);
+        seedExecution(seeded, 2);
+
+        mockMvc.perform(get("/api/jobs/" + seeded.getId())
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptCount").value(2))
+                .andExpect(jsonPath("$.availableAt").exists());
+    }
+
+    private JobExecution seedExecution(Job job, int attemptNumber) {
+        JobExecution exec = new JobExecution(
+                null, job, "worker-1", attemptNumber, JobExecutionStatus.SUCCEEDED);
+        return jobExecutionRepository.saveAndFlush(exec);
     }
 
     @Test
