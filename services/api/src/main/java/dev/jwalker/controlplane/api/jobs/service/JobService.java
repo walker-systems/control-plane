@@ -7,14 +7,18 @@ import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobPriority;
 import dev.jwalker.controlplane.api.jobs.model.JobStatus;
 import dev.jwalker.controlplane.api.jobs.model.JobType;
+import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
+import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository.JobAttemptCount;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +33,7 @@ public class JobService {
     private static final int DEFAULT_MAX_RETRIES = 3;
 
     private final JobRepository jobRepository;
+    private final JobExecutionRepository jobExecutionRepository;
     private final UserRepository userRepository;
     private final AuditEventService auditEventService;
 
@@ -57,14 +62,15 @@ public class JobService {
                 Map.of(
                         "type", saved.getType().name(),
                         "priority", saved.getPriority().name()));
-        return JobResponse.from(saved);
+        // Fresh job — no executions yet, so attempt count is definitionally zero.
+        return JobResponse.from(saved, 0L);
     }
 
     @Transactional(readOnly = true)
     public Optional<JobResponse> findById(UUID jobId, AuthenticatedCaller caller) {
         return jobRepository.findByIdWithRelations(jobId)
                 .filter(job -> canAccess(job, caller))
-                .map(JobResponse::from);
+                .map(job -> JobResponse.from(job, jobExecutionRepository.countByJob_Id(job.getId())));
     }
 
     @Transactional(readOnly = true)
@@ -77,8 +83,13 @@ public class JobService {
             Pageable pageable,
             AuthenticatedCaller caller) {
         UUID effectiveOwnerId = caller.isPrivileged() ? ownerId : caller.userId();
-        return jobRepository.search(status, type, priority, effectiveOwnerId, sourceScheduleId, pageable)
-                .map(JobResponse::from);
+        Page<Job> jobPage = jobRepository.search(
+                status, type, priority, effectiveOwnerId, sourceScheduleId, pageable);
+        // Bulk-fetch attempt counts for every job in the page in one query
+        // rather than N per-job COUNT queries. Jobs with no executions
+        // aren't returned by the grouped query — getOrDefault fills 0.
+        Map<UUID, Long> counts = executionCountsFor(jobPage.getContent());
+        return jobPage.map(job -> JobResponse.from(job, counts.getOrDefault(job.getId(), 0L)));
     }
 
     @Transactional
@@ -103,7 +114,7 @@ public class JobService {
                 "Job",
                 saved.getId(),
                 Map.of("previousStatus", previous.name()));
-        return Optional.of(JobResponse.from(saved));
+        return Optional.of(JobResponse.from(saved, jobExecutionRepository.countByJob_Id(saved.getId())));
     }
 
     @Transactional
@@ -128,7 +139,16 @@ public class JobService {
                 "Job",
                 saved.getId(),
                 Map.of("previousStatus", previous.name()));
-        return Optional.of(JobResponse.from(saved));
+        return Optional.of(JobResponse.from(saved, jobExecutionRepository.countByJob_Id(saved.getId())));
+    }
+
+    private Map<UUID, Long> executionCountsFor(List<Job> jobs) {
+        if (jobs.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> ids = jobs.stream().map(Job::getId).toList();
+        return jobExecutionRepository.countAttemptsByJobIds(ids).stream()
+                .collect(Collectors.toMap(JobAttemptCount::getJobId, JobAttemptCount::getAttemptCount));
     }
 
     private static boolean canAccess(Job job, AuthenticatedCaller caller) {
