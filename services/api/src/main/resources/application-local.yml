@@ -10,3 +10,8 @@ app:
     enabled: true
     admin-email: admin@control-plane.local
     admin-password: change-me-on-first-login
+  # Local dev opts in — the LoggingJobHandler placeholders are fine for
+  # smoke-testing the tick loop. Production must set EXECUTOR_ENABLED=true
+  # explicitly, and only once real per-type handlers exist.
+  executor:
+    enabled: true
