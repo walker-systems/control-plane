@@ -189,7 +189,7 @@ class JobServiceTest {
     void cancel_transitionsPendingToCancelled_whenCallerIsOwner() {
         UUID jobId = UUID.randomUUID();
         Job job = pendingJob(jobId);
-        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(job));
         when(jobRepository.save(job)).thenReturn(job);
 
         Optional<JobResponse> response = jobService.cancel(jobId, ownerCaller);
@@ -199,12 +199,15 @@ class JobServiceTest {
 
         verify(auditEventService).record(
                 eq(AuditEventType.JOB_CANCELLED), eq("Job"), eq(jobId), any());
+        // Cancel must use the locking read; the non-locking variant would let
+        // an in-flight executor tx race the status check.
+        verify(jobRepository, never()).findByIdWithRelations(any());
     }
 
     @Test
     void cancel_returnsEmpty_whenCallerIsUnprivilegedNonOwner() {
         UUID jobId = UUID.randomUUID();
-        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(pendingJob(jobId)));
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(pendingJob(jobId)));
 
         assertThat(jobService.cancel(jobId, otherUserCaller)).isEmpty();
         verify(jobRepository, never()).save(any());
@@ -215,7 +218,7 @@ class JobServiceTest {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
                 JobStatus.RUNNING, JobPriority.MEDIUM, null, 3);
-        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(job));
 
         assertThatThrownBy(() -> jobService.cancel(jobId, ownerCaller))
                 .isInstanceOf(JobStateException.class)
@@ -228,7 +231,7 @@ class JobServiceTest {
     @Test
     void cancel_returnsEmpty_whenJobMissing() {
         UUID jobId = UUID.randomUUID();
-        when(jobRepository.findByIdWithRelations(jobId)).thenReturn(Optional.empty());
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.empty());
 
         assertThat(jobService.cancel(jobId, ownerCaller)).isEmpty();
         verify(jobRepository, never()).save(any());

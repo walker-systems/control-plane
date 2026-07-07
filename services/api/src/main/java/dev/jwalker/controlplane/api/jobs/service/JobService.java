@@ -94,7 +94,14 @@ public class JobService {
 
     @Transactional
     public Optional<JobResponse> cancel(UUID jobId, AuthenticatedCaller caller) {
-        Optional<Job> jobOpt = jobRepository.findByIdWithRelations(jobId)
+        // Locking read: if the executor tick is mid-processing this job,
+        // wait for its transaction to commit before checking status. That
+        // way the status check below sees the executor's post-commit
+        // outcome (SUCCEEDED / retry-PENDING / DEAD_LETTER) rather than
+        // the stale PENDING it started with, and we correctly reject
+        // the cancel with CANNOT_CANCEL instead of overwriting the
+        // executor's committed result.
+        Optional<Job> jobOpt = jobRepository.findByIdWithRelationsForUpdate(jobId)
                 .filter(job -> canAccess(job, caller));
         if (jobOpt.isEmpty()) {
             return Optional.empty();

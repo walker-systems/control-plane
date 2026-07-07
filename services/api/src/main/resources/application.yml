@@ -64,7 +64,13 @@ app:
     tick-interval-ms: ${SCHEDULING_TICK_INTERVAL_MS:30000}
     batch-size: ${SCHEDULING_BATCH_SIZE:50}
   executor:
-    enabled: ${EXECUTOR_ENABLED:true}
+    # Defaults to false: only the LoggingJobHandler placeholders are
+    # registered right now, and enabling the tick without real per-type
+    # handlers would silently mark user-created CUSTOMER_EXPORT /
+    # STALE_ACCOUNT_CLEANUP / SUSPICIOUS_ACCOUNT_SCAN / CRM_SYNC jobs
+    # as SUCCEEDED without actually doing the work. Explicitly opt in
+    # per-environment once real handlers are wired.
+    enabled: ${EXECUTOR_ENABLED:false}
     tick-interval-ms: ${EXECUTOR_TICK_INTERVAL_MS:5000}
     batch-size: ${EXECUTOR_BATCH_SIZE:10}
 
