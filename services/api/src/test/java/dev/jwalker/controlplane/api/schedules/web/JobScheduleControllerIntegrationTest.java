@@ -201,6 +201,48 @@ class JobScheduleControllerIntegrationTest {
     }
 
     @Test
+    void create_withMaxRetriesAbove20_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobScheduleCreateRequest body = new JobScheduleCreateRequest(
+                "Retry Abuse", JobType.CRM_SYNC, "{}", JobPriority.MEDIUM, 21,
+                "0 0 * * * *", "UTC");
+
+        mockMvc.perform(post("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void update_withMaxRetriesAbove20_returns400() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+
+        JobScheduleCreateRequest createBody = new JobScheduleCreateRequest(
+                "Retry Update", JobType.CRM_SYNC, "{}", JobPriority.MEDIUM, 3,
+                "0 0 * * * *", "UTC");
+        MvcResult created = mockMvc.perform(post("/api/schedules")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createBody)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String scheduleId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("id").asString();
+
+        String patchBody = "{\"maxRetries\":21}";
+
+        mockMvc.perform(patch("/api/schedules/" + scheduleId)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(patchBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void create_withMissingName_returns400() throws Exception {
         seedUser("alice@example.com", "password");
         String accessToken = loginAndExtractAccess("alice@example.com", "password");
