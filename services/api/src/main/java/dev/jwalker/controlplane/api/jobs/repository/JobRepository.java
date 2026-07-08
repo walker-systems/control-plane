@@ -74,6 +74,12 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     // executor invocations pick disjoint slices without blocking. Same -2
     // hint trick as the schedule repo for SKIP LOCKED semantics.
     //
+    // No LEFT JOIN FETCH here: Hibernate's follow-on locking with fetch
+    // joins conflicts with SKIP LOCKED under concurrent access (throws
+    // "Expecting results" when a peer grabs the row first). Handlers that
+    // need lazy fields (owner) must be loaded explicitly by the executor's
+    // pick phase.
+    //
     // Ordering: HIGH before MEDIUM before LOW, then FIFO by createdAt within
     // a priority. Priority is stored as VARCHAR (@Enumerated STRING) so a
     // naive `order by priority desc` would sort alphabetically — MEDIUM,
@@ -86,12 +92,12 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("""
     select j from Job j
-    where j.status = dev.jwalker.controlplane.api.jobs.model.JobStatus.PENDING
+    where j.status = JobStatus.PENDING
       and j.availableAt <= :cutoff
     order by
         case j.priority
-            when dev.jwalker.controlplane.api.jobs.model.JobPriority.HIGH then 3
-            when dev.jwalker.controlplane.api.jobs.model.JobPriority.MEDIUM then 2
+            when JobPriority.HIGH then 3
+            when JobPriority.MEDIUM then 2
             else 1
         end desc,
         j.createdAt asc
