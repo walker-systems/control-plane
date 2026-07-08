@@ -73,4 +73,11 @@ app:
     enabled: ${EXECUTOR_ENABLED:false}
     tick-interval-ms: ${EXECUTOR_TICK_INTERVAL_MS:5000}
     batch-size: ${EXECUTOR_BATCH_SIZE:10}
+  watchdog:
+    # Safe to enable by default. Watchdog only touches JobExecution
+    # rows whose lease has already expired — if the executor is off,
+    # there are no such rows and each tick is a no-op query.
+    enabled: ${WATCHDOG_ENABLED:true}
+    tick-interval-ms: ${WATCHDOG_TICK_INTERVAL_MS:60000}
+    batch-size: ${WATCHDOG_BATCH_SIZE:50}
 

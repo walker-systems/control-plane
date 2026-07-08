@@ -3,6 +3,9 @@ package dev.jwalker.controlplane.api.jobs.repository;
 import dev.jwalker.controlplane.api.jobs.model.Job;
 import dev.jwalker.controlplane.api.jobs.model.JobExecution;
 import dev.jwalker.controlplane.api.jobs.model.JobExecutionStatus;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -10,7 +13,9 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface JobExecutionRepository extends JpaRepository<JobExecution, UUID> {
@@ -53,4 +58,22 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, UUID
         UUID getJobId();
         long getAttemptCount();
     }
+
+    // Executions whose lease has expired — the worker that started them
+    // is presumed dead. Locked FOR UPDATE SKIP LOCKED so parallel
+    // watchdog ticks reclaim disjoint slices. Same -2 hint trick as the
+    // executor and schedule repos. Ordering by leaseExpiresAt puts the
+    // most overdue rows first so the oldest failures get attention
+    // even if the batch cap truncates the tail.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
+    @Query("""
+            SELECT je FROM JobExecution je
+            LEFT JOIN FETCH je.job
+            WHERE je.status = dev.jwalker.controlplane.api.jobs.model.JobExecutionStatus.RUNNING
+              AND je.leaseExpiresAt < :cutoff
+            ORDER BY je.leaseExpiresAt
+            """)
+    List<JobExecution> findExpiredForUpdate(
+            @Param("cutoff") OffsetDateTime cutoff, Pageable pageable);
 }
