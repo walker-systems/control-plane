@@ -388,6 +388,49 @@ class JobControllerIntegrationTest {
     }
 
     @Test
+    void cancel_runningJob_setsCancelRequestedAt_andKeepsStatusRunning() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        Job seeded = seedJob("alice@example.com", JobStatus.RUNNING);
+
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RUNNING"))
+                .andExpect(jsonPath("$.cancelRequestedAt").isNotEmpty());
+
+        // Second cancel is idempotent — flag stays set, still 200.
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cancelRequestedAt").isNotEmpty());
+    }
+
+    @Test
+    void cancel_succeededJob_returns409() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        Job seeded = seedJob("alice@example.com", JobStatus.SUCCEEDED);
+
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reason").value("CANNOT_CANCEL"));
+    }
+
+    @Test
+    void cancel_deadLetteredJob_returns409() throws Exception {
+        seedUser("alice@example.com", "password");
+        String accessToken = loginAndExtractAccess("alice@example.com", "password");
+        Job seeded = seedJob("alice@example.com", JobStatus.DEAD_LETTER);
+
+        mockMvc.perform(post("/api/jobs/" + seeded.getId() + "/cancel")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reason").value("CANNOT_CANCEL"));
+    }
+
+    @Test
     void cancel_alreadyCancelledJob_returns409() throws Exception {
         seedUser("alice@example.com", "password");
         String accessToken = loginAndExtractAccess("alice@example.com", "password");

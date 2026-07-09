@@ -65,8 +65,12 @@ public class JobExecutorTxOps {
         return picked;
     }
 
-    // Handler returned. Re-lock the Job, mark the JobExecution SUCCEEDED,
-    // transition the Job, emit JOB_SUCCEEDED. Short tx.
+    // Handler returned. Re-lock the Job, mark the JobExecution SUCCEEDED
+    // (that's the attempt's actual outcome — preserved regardless of
+    // cancel), and transition the Job. If cancel was requested during
+    // handler execution, the Job goes to CANCELLED and JOB_CANCELLED
+    // fires with attemptOutcome=SUCCEEDED. Otherwise JOB_SUCCEEDED
+    // fires as usual.
     @Transactional
     public void completeSuccess(UUID jobId, UUID execId, int attemptNumber, String summary) {
         Job job = jobRepository.findByIdWithRelationsForUpdate(jobId).orElseThrow(
@@ -75,14 +79,25 @@ public class JobExecutorTxOps {
                 () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
 
         exec.markSucceeded(summary);
-        job.setStatus(JobStatus.SUCCEEDED);
-        job.touch();
-        emitSucceeded(jobId, attemptNumber, summary);
+
+        if (job.getCancelRequestedAt() != null) {
+            job.setStatus(JobStatus.CANCELLED);
+            job.touch();
+            emitCancelled(jobId, attemptNumber, "RUNNING", "SUCCEEDED");
+        } else {
+            job.setStatus(JobStatus.SUCCEEDED);
+            job.touch();
+            emitSucceeded(jobId, attemptNumber, summary);
+        }
     }
 
-    // Handler threw. Re-lock the Job, mark the JobExecution FAILED, decide
-    // between retry (PENDING + backoff) and DEAD_LETTER, emit the audit
-    // trail. Short tx.
+    // Handler threw. Re-lock the Job, mark the JobExecution FAILED (the
+    // attempt's actual outcome), then decide the Job's fate:
+    //  - cancel_requested_at set → straight to CANCELLED, no retry.
+    //    JOB_CANCELLED fires with attemptOutcome=FAILED.
+    //  - retries remain → PENDING with backoff; JOB_FAILED fires.
+    //  - retries exhausted → DEAD_LETTER; JOB_FAILED + JOB_DEAD_LETTERED
+    //    fire.
     @Transactional
     public void completeFailure(
             UUID jobId, UUID execId, int attemptNumber, String errorMessage, OffsetDateTime now) {
@@ -92,6 +107,14 @@ public class JobExecutorTxOps {
                 () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
 
         exec.markFailed(errorMessage);
+
+        if (job.getCancelRequestedAt() != null) {
+            job.setStatus(JobStatus.CANCELLED);
+            job.touch();
+            emitCancelled(jobId, attemptNumber, "RUNNING", "FAILED");
+            return;
+        }
+
         emitFailed(jobId, attemptNumber, errorMessage);
 
         // maxRetries is "retries after the first attempt," so with
@@ -109,9 +132,10 @@ public class JobExecutorTxOps {
     }
 
     // Handler was never invoked because no @Component JobHandler matched
-    // the type. Straight to DEAD_LETTER — retrying a config bug can't
-    // help — but still record it as a failed attempt so the audit trail
-    // matches other terminal transitions.
+    // the type. Straight to DEAD_LETTER (retrying a config bug can't
+    // help) unless the user requested cancel first — in which case cancel
+    // wins and the Job goes to CANCELLED. Either way we record the
+    // JobExecution as FAILED with a diagnostic message.
     @Transactional
     public void completeMissingHandler(
             UUID jobId, UUID execId, JobType type, int attemptNumber) {
@@ -122,9 +146,16 @@ public class JobExecutorTxOps {
 
         String errorMessage = "No handler registered for type " + type;
         exec.markFailed(errorMessage);
+
+        if (job.getCancelRequestedAt() != null) {
+            job.setStatus(JobStatus.CANCELLED);
+            job.touch();
+            emitCancelled(jobId, attemptNumber, "RUNNING", "FAILED_MISSING_HANDLER");
+            return;
+        }
+
         job.setStatus(JobStatus.DEAD_LETTER);
         job.touch();
-
         emitFailed(jobId, attemptNumber, errorMessage);
         emitDeadLettered(jobId, attemptNumber, "missing_handler");
 
@@ -158,5 +189,15 @@ public class JobExecutorTxOps {
         auditEventService.recordWithActor(
                 AuditEventType.JOB_DEAD_LETTERED, null, "Job", jobId,
                 Map.of("finalAttempt", finalAttempt, "reason", reason));
+    }
+
+    private void emitCancelled(
+            UUID jobId, int attemptNumber, String previousStatus, String attemptOutcome) {
+        auditEventService.recordWithActor(
+                AuditEventType.JOB_CANCELLED, null, "Job", jobId,
+                Map.of(
+                        "previousStatus", previousStatus,
+                        "attemptNumber", attemptNumber,
+                        "attemptOutcome", attemptOutcome));
     }
 }

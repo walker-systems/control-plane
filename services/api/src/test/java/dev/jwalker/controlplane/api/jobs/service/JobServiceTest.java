@@ -196,6 +196,9 @@ class JobServiceTest {
 
         assertThat(response).isPresent();
         assertThat(response.get().status()).isEqualTo(JobStatus.CANCELLED);
+        // Cancel-from-PENDING now also stamps the request timestamp for
+        // uniform "when was cancel requested" observability.
+        assertThat(response.get().cancelRequestedAt()).isNotNull();
 
         verify(auditEventService).record(
                 eq(AuditEventType.JOB_CANCELLED), eq("Job"), eq(jobId), any());
@@ -214,10 +217,30 @@ class JobServiceTest {
     }
 
     @Test
-    void cancel_throwsJobStateException_whenJobIsRunning() {
+    void cancel_setsCancelRequestedAt_andKeepsStatus_whenJobIsRunning() {
         UUID jobId = UUID.randomUUID();
         Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
                 JobStatus.RUNNING, JobPriority.MEDIUM, null, 3);
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.save(job)).thenReturn(job);
+
+        Optional<JobResponse> response = jobService.cancel(jobId, ownerCaller);
+
+        assertThat(response).isPresent();
+        // Deferred cancel: status stays RUNNING; executor/watchdog will honor
+        // cancelRequestedAt when finalizing the outcome.
+        assertThat(job.getStatus()).isEqualTo(JobStatus.RUNNING);
+        assertThat(job.getCancelRequestedAt()).isNotNull();
+        // No JOB_CANCELLED audit at the API layer for the running case;
+        // the executor emits it when the transition actually happens.
+        verify(auditEventService, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    void cancel_throwsJobStateException_whenJobIsSucceeded() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.SUCCEEDED, JobPriority.MEDIUM, null, 3);
         when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(job));
 
         assertThatThrownBy(() -> jobService.cancel(jobId, ownerCaller))
@@ -225,7 +248,20 @@ class JobServiceTest {
                 .extracting(e -> ((JobStateException) e).reason())
                 .isEqualTo(JobStateException.Reason.CANNOT_CANCEL);
         verify(jobRepository, never()).save(any());
-        verify(auditEventService, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    void cancel_throwsJobStateException_whenJobIsDeadLettered() {
+        UUID jobId = UUID.randomUUID();
+        Job job = new Job(jobId, owner, null, JobType.CRM_SYNC, "{}",
+                JobStatus.DEAD_LETTER, JobPriority.MEDIUM, null, 3);
+        when(jobRepository.findByIdWithRelationsForUpdate(jobId)).thenReturn(Optional.of(job));
+
+        assertThatThrownBy(() -> jobService.cancel(jobId, ownerCaller))
+                .isInstanceOf(JobStateException.class)
+                .extracting(e -> ((JobStateException) e).reason())
+                .isEqualTo(JobStateException.Reason.CANNOT_CANCEL);
+        verify(jobRepository, never()).save(any());
     }
 
     @Test

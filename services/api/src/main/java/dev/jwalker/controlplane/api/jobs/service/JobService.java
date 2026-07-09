@@ -14,6 +14,7 @@ import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -94,34 +95,50 @@ public class JobService {
 
     @Transactional
     public Optional<JobResponse> cancel(UUID jobId, AuthenticatedCaller caller) {
-        // Locking read: if the executor tick is mid-processing this job,
-        // wait for its transaction to commit before checking status. That
-        // way the status check below sees the executor's post-commit
-        // outcome (SUCCEEDED / retry-PENDING / DEAD_LETTER) rather than
-        // the stale PENDING it started with, and we correctly reject
-        // the cancel with CANNOT_CANCEL instead of overwriting the
-        // executor's committed result.
+        // Locking read: if the executor's complete phase is mid-tx on this
+        // row, wait for it to commit before checking status. That way the
+        // status check below sees the post-commit state and correctly
+        // refuses cancel on terminal outcomes rather than trampling them.
         Optional<Job> jobOpt = jobRepository.findByIdWithRelationsForUpdate(jobId)
                 .filter(job -> canAccess(job, caller));
         if (jobOpt.isEmpty()) {
             return Optional.empty();
         }
         Job job = jobOpt.get();
-        if (job.getStatus() != JobStatus.PENDING) {
-            throw new JobStateException(
-                    JobStateException.Reason.CANNOT_CANCEL,
-                    "Cannot cancel job in status " + job.getStatus());
+        OffsetDateTime now = OffsetDateTime.now();
+        JobStatus current = job.getStatus();
+
+        if (current == JobStatus.PENDING) {
+            // Immediate cancel: job hasn't been picked up yet.
+            job.setStatus(JobStatus.CANCELLED);
+            job.setCancelRequestedAt(now);
+            job.touch();
+            Job saved = jobRepository.save(job);
+            auditEventService.record(
+                    AuditEventType.JOB_CANCELLED,
+                    "Job",
+                    saved.getId(),
+                    Map.of("previousStatus", "PENDING"));
+            return Optional.of(JobResponse.from(saved, jobExecutionRepository.countByJob_Id(saved.getId())));
         }
-        JobStatus previous = job.getStatus();
-        job.setStatus(JobStatus.CANCELLED);
-        job.touch();
-        Job saved = jobRepository.save(job);
-        auditEventService.record(
-                AuditEventType.JOB_CANCELLED,
-                "Job",
-                saved.getId(),
-                Map.of("previousStatus", previous.name()));
-        return Optional.of(JobResponse.from(saved, jobExecutionRepository.countByJob_Id(saved.getId())));
+
+        if (current == JobStatus.RUNNING) {
+            // Deferred cancel: executor holds no row lock during handler
+            // execution (per the pick/run/complete split), so setting the
+            // flag doesn't block behind the handler. The executor's
+            // complete phase or the watchdog will honor the flag when
+            // finalizing outcome. Idempotent — setting again just
+            // refreshes the timestamp.
+            job.setCancelRequestedAt(now);
+            job.touch();
+            Job saved = jobRepository.save(job);
+            return Optional.of(JobResponse.from(saved, jobExecutionRepository.countByJob_Id(saved.getId())));
+        }
+
+        // SUCCEEDED / FAILED / DEAD_LETTER / CANCELLED — all terminal.
+        throw new JobStateException(
+                JobStateException.Reason.CANNOT_CANCEL,
+                "Cannot cancel job in status " + current);
     }
 
     @Transactional

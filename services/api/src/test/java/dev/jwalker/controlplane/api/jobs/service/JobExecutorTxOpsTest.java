@@ -176,6 +176,70 @@ class JobExecutorTxOpsTest {
                 eq(AuditEventType.JOB_DEAD_LETTERED), isNull(), eq("Job"), eq(job.getId()), any());
     }
 
+    // --- cancel honoring -----------------------------------------------
+
+    @Test
+    void completeSuccess_honorsCancelRequest_transitionsJobToCancelledAndEmitsCancelled() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        job.setCancelRequestedAt(NOW.minusSeconds(2));
+        JobExecution exec = runningExecution(job, 1);
+        when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
+        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeSuccess(job.getId(), exec.getId(), 1, "done");
+
+        // Job: CANCELLED; JobExecution: SUCCEEDED (attempt outcome preserved).
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.SUCCEEDED);
+        assertThat(exec.getOutputSummary()).isEqualTo("done");
+
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_CANCELLED), isNull(), eq("Job"), eq(job.getId()), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_SUCCEEDED), any(), any(), any(), any());
+    }
+
+    @Test
+    void completeFailure_honorsCancelRequest_skipsRetryAndDeadLetter() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        job.setCancelRequestedAt(NOW.minusSeconds(2));
+        JobExecution exec = runningExecution(job, 1);
+        when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
+        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeFailure(job.getId(), exec.getId(), 1, "boom", NOW);
+
+        // Job: CANCELLED (no retry despite attempts remaining).
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.FAILED);
+
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_CANCELLED), isNull(), eq("Job"), eq(job.getId()), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_FAILED), any(), any(), any(), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_DEAD_LETTERED), any(), any(), any(), any());
+    }
+
+    @Test
+    void completeMissingHandler_honorsCancelRequest_transitionsToCancelledInsteadOfDeadLetter() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        job.setCancelRequestedAt(NOW.minusSeconds(2));
+        JobExecution exec = runningExecution(job, 1);
+        when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
+        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeMissingHandler(job.getId(), exec.getId(), JobType.CRM_SYNC, 1);
+
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.FAILED);
+
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_CANCELLED), isNull(), eq("Job"), eq(job.getId()), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_DEAD_LETTERED), any(), any(), any(), any());
+    }
+
     // --- completeMissingHandler ----------------------------------------
 
     @Test

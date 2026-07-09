@@ -133,6 +133,29 @@ class JobExecutionWatchdogTest {
     }
 
     @Test
+    void reclaimExpired_honorsCancelRequest_transitionsToCancelledInsteadOfRetry() {
+        Job job = pendingJob(3);
+        job.setCancelRequestedAt(OffsetDateTime.ofInstant(FIXED_NOW, ZoneOffset.UTC).minusSeconds(2));
+        JobExecution exec = expiredExecution(job, 1);
+        stubExpired(List.of(exec));
+        when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
+
+        watchdog.reclaimExpired();
+
+        // Job: CANCELLED (user's intent wins over retry). Execution: TIMED_OUT
+        // (that's what actually happened at the worker layer).
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.TIMED_OUT);
+
+        verify(auditEventService).recordWithActor(
+                eq(AuditEventType.JOB_CANCELLED), isNull(), eq("Job"), eq(job.getId()), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_TIMED_OUT), any(), any(), any(), any());
+        verify(auditEventService, never()).recordWithActor(
+                eq(AuditEventType.JOB_DEAD_LETTERED), any(), any(), any(), any());
+    }
+
+    @Test
     void reclaimExpired_returnsZero_whenNothingExpired() {
         stubExpired(List.of());
 

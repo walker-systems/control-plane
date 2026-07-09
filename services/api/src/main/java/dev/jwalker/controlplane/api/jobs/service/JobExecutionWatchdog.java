@@ -14,6 +14,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -75,6 +76,22 @@ public class JobExecutionWatchdog {
         exec.setErrorMessage(errorMessage);
 
         int attemptNumber = exec.getAttemptNumber();
+
+        // If the user requested cancel while the worker was hung, honor it:
+        // the attempt is TIMED_OUT (that's what actually happened at the
+        // worker layer), but the Job goes to CANCELLED instead of
+        // retry/DEAD_LETTER. JOB_CANCELLED is the audit event; JOB_TIMED_OUT
+        // is skipped since the user's intent supersedes the timeout.
+        if (job.getCancelRequestedAt() != null) {
+            job.setStatus(JobStatus.CANCELLED);
+            job.touch();
+            emitCancelled(job.getId(), attemptNumber, "TIMED_OUT");
+            log.warn(
+                    "Reclaimed expired JobExecution {} for Job {} (attempt {}): CANCELLED (user requested)",
+                    exec.getId(), job.getId(), attemptNumber);
+            return;
+        }
+
         emitTimedOut(job, attemptNumber, errorMessage);
 
         if (attemptNumber <= job.getMaxRetries()) {
@@ -105,5 +122,14 @@ public class JobExecutionWatchdog {
         auditEventService.recordWithActor(
                 AuditEventType.JOB_DEAD_LETTERED, null, "Job", job.getId(),
                 Map.of("finalAttempt", finalAttempt, "reason", reason));
+    }
+
+    private void emitCancelled(UUID jobId, int attemptNumber, String attemptOutcome) {
+        auditEventService.recordWithActor(
+                AuditEventType.JOB_CANCELLED, null, "Job", jobId,
+                Map.of(
+                        "previousStatus", "RUNNING",
+                        "attemptNumber", attemptNumber,
+                        "attemptOutcome", attemptOutcome));
     }
 }

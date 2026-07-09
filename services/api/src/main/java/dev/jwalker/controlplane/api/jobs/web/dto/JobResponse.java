@@ -19,6 +19,7 @@ public record JobResponse(
         int maxRetries,
         long attemptCount,
         OffsetDateTime availableAt,
+        OffsetDateTime cancelRequestedAt,
         UUID sourceScheduleId,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
@@ -39,6 +40,7 @@ public record JobResponse(
                 job.getMaxRetries(),
                 attemptCount,
                 job.getAvailableAt(),
+                job.getCancelRequestedAt(),
                 job.getSourceScheduleId(),
                 job.getCreatedAt(),
                 job.getUpdatedAt());
