@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 
-// Response shape from POST /api/auth/login. Kept inline for now; if
-// we grow more auth calls we'll pull auth types into src/lib/auth.ts.
+// Response shape from POST /api/auth/login. Matches the API's
+// TokenResponse record — deliberately no `email` field; the API
+// doesn't echo it back. We use the submitted email when populating
+// the user in the auth store.
 interface LoginResponse {
   accessToken: string
   refreshToken: string
-  email: string
+  tokenType: string
+  expiresIn: number
 }
 
 export function Login() {
@@ -39,7 +42,10 @@ export function Login() {
       setSession({
         accessToken: resp.accessToken,
         refreshToken: resp.refreshToken,
-        user: { email: resp.email },
+        // API doesn't echo the email in TokenResponse; use the value
+        // the user just submitted — it's what they'd see in the nav
+        // either way.
+        user: { email },
       })
       navigate(redirectTo, { replace: true })
     } catch (e) {
