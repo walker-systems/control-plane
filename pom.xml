@@ -22,6 +22,5 @@
 
     <modules>
         <module>services/api</module>
-        <module>services/worker</module>
     </modules>
 </project>
