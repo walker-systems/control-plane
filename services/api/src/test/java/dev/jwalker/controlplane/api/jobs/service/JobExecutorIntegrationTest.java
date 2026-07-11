@@ -44,7 +44,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         "app.security.refresh-token-days=7",
         // Both ticks off — the tests drive the executor manually.
         "app.scheduling.enabled=false",
-        "app.executor.enabled=false"
+        "app.executor.enabled=false",
+        // Instant, guaranteed-success mode for the simulated handlers so
+        // the parallel test can rely on all 10 jobs SUCCEEDING and the
+        // happy-path test doesn't spend 10s in Thread.sleep.
+        "app.demo.simulated-handlers.chunk-millis=0"
 })
 class JobExecutorIntegrationTest {
 
@@ -88,7 +92,8 @@ class JobExecutorIntegrationTest {
         JobExecution exec = executions.get(0);
         assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.SUCCEEDED);
         assertThat(exec.getAttemptNumber()).isEqualTo(1);
-        assertThat(exec.getOutputSummary()).contains("handled by");
+        // CRM_SYNC handler's success summary shape: "synced N contacts".
+        assertThat(exec.getOutputSummary()).contains("synced");
 
         List<AuditEvent> startedEvents =
                 auditEventRepository.findByEventType(AuditEventType.JOB_STARTED);

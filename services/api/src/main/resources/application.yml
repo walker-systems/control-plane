@@ -51,6 +51,13 @@ logging:
     dev.jwalker.controlplane: ${APP_LOG_LEVEL:INFO}
 
 app:
+  scheduler:
+    # Pool size for the ThreadPoolTaskScheduler bean in SchedulerConfig.
+    # Three @Scheduled ticks today (schedule materializer, executor,
+    # watchdog); 5 leaves headroom. See SchedulerConfig for why this
+    # is a bean rather than spring.task.scheduling.pool.size (which is
+    # ignored when virtual threads are enabled).
+    pool-size: ${SCHEDULER_POOL_SIZE:5}
   security:
     jwt-secret: ${JWT_SECRET:replace-this-in-real-env}
     access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:15}
@@ -64,12 +71,11 @@ app:
     tick-interval-ms: ${SCHEDULING_TICK_INTERVAL_MS:30000}
     batch-size: ${SCHEDULING_BATCH_SIZE:50}
   executor:
-    # Defaults to false: only the LoggingJobHandler placeholders are
-    # registered right now, and enabling the tick without real per-type
-    # handlers would silently mark user-created CUSTOMER_EXPORT /
-    # STALE_ACCOUNT_CLEANUP / SUSPICIOUS_ACCOUNT_SCAN / CRM_SYNC jobs
-    # as SUCCEEDED without actually doing the work. Explicitly opt in
-    # per-environment once real handlers are wired.
+    # Defaults to false so integration tests can seed PENDING rows
+    # without the scheduled tick racing them. Local dev and prod
+    # should set EXECUTOR_ENABLED=true — the SimulatedWorkHandler
+    # subclasses give every JobType a plausible demo behavior
+    # (visible RUNNING time, occasional retry, rare DEAD_LETTER).
     enabled: ${EXECUTOR_ENABLED:false}
     tick-interval-ms: ${EXECUTOR_TICK_INTERVAL_MS:5000}
     batch-size: ${EXECUTOR_BATCH_SIZE:10}
@@ -80,4 +86,13 @@ app:
     enabled: ${WATCHDOG_ENABLED:true}
     tick-interval-ms: ${WATCHDOG_TICK_INTERVAL_MS:60000}
     batch-size: ${WATCHDOG_BATCH_SIZE:50}
+  demo:
+    simulated-handlers:
+      # Milliseconds per "chunk" of simulated work. Each handler runs
+      # some number of chunks (3–8 depending on type), so total per-job
+      # duration lands roughly in the 6–16s range at the default.
+      # Set to 0 to short-circuit into instant, guaranteed-success mode
+      # — used by integration tests so the suite stays fast and
+      # deterministic without needing a separate handler class.
+      chunk-millis: ${DEMO_HANDLER_CHUNK_MILLIS:2000}
 
