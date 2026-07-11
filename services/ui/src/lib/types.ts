@@ -63,7 +63,10 @@ export interface AuditEventResponse {
   actorUserId: string | null
   targetType: string | null
   targetId: string | null
-  metadata: Record<string, unknown> | null
+  // The API sends this as a JSON string (`metadataJson`), not a parsed
+  // object. Callers that want the structured payload should JSON.parse
+  // it — see AuditEventResponse.java on the server side.
+  metadataJson: string | null
   createdAt: string
 }
 

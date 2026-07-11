@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
+import { getMe } from '@/lib/users'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
@@ -39,14 +40,23 @@ export function Login() {
         body: { email, password },
         auth: false,
       })
+      // Set the session first so the follow-up /me call carries the
+      // bearer. The user record is provisional (submitted email, no
+      // roles) — /me replaces it with the canonical record.
       setSession({
         accessToken: resp.accessToken,
         refreshToken: resp.refreshToken,
-        // API doesn't echo the email in TokenResponse; use the value
-        // the user just submitted — it's what they'd see in the nav
-        // either way.
-        user: { email },
+        user: { email, roles: [] },
       })
+      try {
+        const me = await getMe()
+        useAuthStore.getState().setUser({ email: me.email, roles: me.roles })
+      } catch (e) {
+        // A failed /me shouldn't block login — the user has a valid
+        // token and can navigate. Role-gated UI (audit trail) just
+        // stays hidden until a re-login refreshes it.
+        console.warn('failed to load /me after login', e)
+      }
       navigate(redirectTo, { replace: true })
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {

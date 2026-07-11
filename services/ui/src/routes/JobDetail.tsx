@@ -2,6 +2,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getJob, listExecutions, listJobAudit } from '@/lib/jobs'
 import type { AuditEventResponse, JobExecutionResponse, JobResponse } from '@/lib/types'
+import { useAuthStore } from '@/lib/auth-store'
+import { canReadAudit } from '@/lib/users'
 import {
   ExecutionStatusBadge,
   JobStatusBadge,
@@ -11,6 +13,12 @@ import { formatAbsolute, formatRelative, shortId } from '@/lib/format'
 
 export function JobDetail() {
   const { id = '' } = useParams<{ id: string }>()
+  // Audit read is OPERATOR/ADMIN only on the API side. USER role
+  // gets 403 — polling anyway would generate a 403 every 3s and
+  // silently render an empty card. Gate the query on the caller
+  // actually having a role that can read it.
+  const roles = useAuthStore((s) => s.user?.roles)
+  const auditVisible = canReadAudit(roles)
 
   const jobQuery = useQuery({
     queryKey: ['job', id],
@@ -28,7 +36,7 @@ export function JobDetail() {
     queryKey: ['job-audit', id],
     queryFn: () => listJobAudit(id),
     refetchInterval: 3_000,
-    enabled: !!id,
+    enabled: !!id && auditVisible,
   })
 
   if (jobQuery.isLoading) {
@@ -61,7 +69,9 @@ export function JobDetail() {
         <div className="lg:col-span-2 space-y-6">
           <PayloadCard payload={job.payloadJson} />
           <ExecutionsCard executions={execsQuery.data ?? []} loading={execsQuery.isLoading} />
-          <AuditCard events={auditQuery.data?.content ?? []} loading={auditQuery.isLoading} />
+          {auditVisible && (
+            <AuditCard events={auditQuery.data?.content ?? []} loading={auditQuery.isLoading} />
+          )}
         </div>
       </div>
     </div>
@@ -177,17 +187,32 @@ function AuditCard({
                 {formatRelative(e.createdAt)}
               </span>
               <span className="font-medium text-slate-800">{e.eventType}</span>
-              {e.metadata && Object.keys(e.metadata).length > 0 && (
-                <span className="text-slate-500 text-xs">
-                  {JSON.stringify(e.metadata)}
-                </span>
-              )}
+              <AuditMetadata json={e.metadataJson} />
             </li>
           ))}
         </ol>
       )}
     </Card>
   )
+}
+
+// Audit metadata comes over the wire as a JSON string. Show it as a
+// compact one-liner beside the event type; skip if empty or unparseable.
+function AuditMetadata({ json }: { json: string | null }) {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
+      return null
+    }
+    return (
+      <span className="text-slate-500 text-xs">
+        {JSON.stringify(parsed)}
+      </span>
+    )
+  } catch {
+    return <span className="text-slate-500 text-xs">{json}</span>
+  }
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {

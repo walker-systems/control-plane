@@ -29,12 +29,22 @@ export function JobsList() {
     refetchInterval: 3_000,
   })
 
-  function updateParam(name: string, value: string | undefined) {
+  // Apply one or more param updates in a single URL write. The
+  // previous single-key version broke when callers wanted to change
+  // two filters at once (e.g. Clear button): each call would rebuild
+  // URLSearchParams from the same `searchParams` closure, so the
+  // second write overwrote the first. Taking a map keeps every
+  // update in one setSearchParams call.
+  function updateParams(updates: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams)
-    if (value) next.set(name, value)
-    else next.delete(name)
+    let filterChanged = false
+    for (const [name, value] of Object.entries(updates)) {
+      if (value) next.set(name, value)
+      else next.delete(name)
+      if (name !== 'page') filterChanged = true
+    }
     // Any filter change resets to page 0.
-    if (name !== 'page') next.delete('page')
+    if (filterChanged) next.delete('page')
     setSearchParams(next, { replace: true })
   }
 
@@ -52,8 +62,9 @@ export function JobsList() {
       <FilterBar
         status={status}
         type={type}
-        onStatusChange={(v) => updateParam('status', v)}
-        onTypeChange={(v) => updateParam('type', v)}
+        onStatusChange={(v) => updateParams({ status: v })}
+        onTypeChange={(v) => updateParams({ type: v })}
+        onClear={() => updateParams({ status: undefined, type: undefined })}
       />
 
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -105,7 +116,7 @@ export function JobsList() {
         <Pagination
           page={page}
           totalPages={data.totalPages}
-          onChange={(p) => updateParam('page', String(p))}
+          onChange={(p) => updateParams({ page: String(p) })}
         />
       )}
     </div>
@@ -117,6 +128,7 @@ function FilterBar(props: {
   type: JobType | undefined
   onStatusChange: (v: JobStatus | undefined) => void
   onTypeChange: (v: JobType | undefined) => void
+  onClear: () => void
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
@@ -133,14 +145,7 @@ function FilterBar(props: {
         options={JOB_TYPES}
       />
       {(props.status || props.type) && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            props.onStatusChange(undefined)
-            props.onTypeChange(undefined)
-          }}
-        >
+        <Button variant="ghost" size="sm" onClick={props.onClear}>
           Clear
         </Button>
       )}
