@@ -73,6 +73,15 @@ public class Job {
     @Column(name = "available_at", nullable = false)
     private OffsetDateTime availableAt;
 
+    // Non-null when a user has requested cancellation. For PENDING jobs the
+    // cancel API sets this at the same moment it transitions status to
+    // CANCELLED. For RUNNING jobs it's the deferred-cancel flag: the
+    // executor's complete phase and the watchdog check it and transition
+    // Job to CANCELLED (skipping the natural outcome) instead of
+    // SUCCEEDED / retry / DEAD_LETTER.
+    @Column(name = "cancel_requested_at")
+    private OffsetDateTime cancelRequestedAt;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

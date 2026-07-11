@@ -13,6 +13,7 @@ public enum AuditEventType {
     JOB_STARTED,
     JOB_SUCCEEDED,
     JOB_FAILED,
+    JOB_TIMED_OUT,
     JOB_DEAD_LETTERED,
     SCHEDULE_CREATED,
     SCHEDULE_UPDATED,
