@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Login } from '@/routes/Login'
 import { Dashboard } from '@/routes/Dashboard'
+import { JobsList } from '@/routes/JobsList'
+import { JobDetail } from '@/routes/JobDetail'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { Layout } from '@/routes/Layout'
 
@@ -18,7 +20,8 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/jobs" element={<PlaceholderPage title="Jobs" />} />
+            <Route path="/jobs" element={<JobsList />} />
+            <Route path="/jobs/:id" element={<JobDetail />} />
             <Route path="/schedules" element={<PlaceholderPage title="Schedules" />} />
           </Route>
         </Route>
