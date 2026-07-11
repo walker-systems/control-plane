@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 //   pickBatch()          — tx: lock N PENDING jobs, transition to RUNNING, commit.
 //                          Row locks release here.
 //   for each picked job:
+//     startAttempt()      — tx: renew this job's lease, verify still RUNNING.
+//                          Skips the rest if the watchdog beat us to it.
 //     handler.handle(job) — no tx. The slow part. Cancel and watchdog can
 //                          progress against other rows during this window.
 //     completeSuccess()   — tx: re-lock, mark SUCCEEDED, commit.
@@ -48,6 +50,17 @@ public class JobExecutor {
     }
 
     private void runOne(PickedJob picked) {
+        // Renew this attempt's lease right before running its handler.
+        // If the watchdog reclaimed it while earlier jobs in the batch
+        // were running, skip the handler entirely — attempt N+1 for the
+        // same Job may already be in flight on another executor tick.
+        if (!txOps.startAttempt(picked.execId(), OffsetDateTime.now(clock))) {
+            log.info("Skipping handler for exec {} (job {}) — attempt no longer RUNNING, "
+                    + "likely reclaimed by watchdog while earlier batch jobs were running",
+                    picked.execId(), picked.job().getId());
+            return;
+        }
+
         Optional<JobHandler> handlerOpt = handlerRegistry.handlerFor(picked.job().getType());
         if (handlerOpt.isEmpty()) {
             txOps.completeMissingHandler(

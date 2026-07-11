@@ -115,6 +115,48 @@ class JobExecutorTxOpsTest {
         verify(auditEventService, never()).recordWithActor(any(), any(), any(), any(), any());
     }
 
+    // --- startAttempt --------------------------------------------------
+
+    @Test
+    void startAttempt_returnsTrueAndExtendsLease_whenExecutionStillRunning() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        JobExecution exec = runningExecution(job, 1);
+        // Old lease was set at pick time; new lease should be `now + 5min`.
+        OffsetDateTime oldLease = NOW.minusMinutes(2);
+        exec.setLeaseExpiresAt(oldLease);
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
+
+        boolean ok = txOps.startAttempt(exec.getId(), NOW);
+
+        assertThat(ok).isTrue();
+        assertThat(exec.getLeaseExpiresAt()).isEqualTo(NOW.plusMinutes(5));
+    }
+
+    @Test
+    void startAttempt_returnsFalseAndLeavesLeaseUntouched_whenExecutionAlreadyTimedOut() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        JobExecution exec = runningExecution(job, 1);
+        exec.setStatus(JobExecutionStatus.TIMED_OUT);
+        OffsetDateTime oldLease = NOW.minusMinutes(2);
+        exec.setLeaseExpiresAt(oldLease);
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
+
+        boolean ok = txOps.startAttempt(exec.getId(), NOW);
+
+        assertThat(ok).isFalse();
+        assertThat(exec.getLeaseExpiresAt()).isEqualTo(oldLease);
+    }
+
+    @Test
+    void startAttempt_returnsFalse_whenExecutionMissing() {
+        UUID missingId = UUID.randomUUID();
+        when(jobExecutionRepository.findByIdForUpdate(missingId)).thenReturn(Optional.empty());
+
+        boolean ok = txOps.startAttempt(missingId, NOW);
+
+        assertThat(ok).isFalse();
+    }
+
     // --- completeSuccess -----------------------------------------------
 
     @Test
