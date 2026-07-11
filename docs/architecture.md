@@ -5,6 +5,7 @@ Control Plane is a single Spring Boot service (`services/api/`) plus a Postgres 
 ## Services
 
 - **`services/api/`** — Spring Boot 4 / Java 25. HTTP endpoints, JWT auth, JPA persistence, and the in-process job executor all live here. The executor picks PENDING jobs on a scheduled tick, runs handlers, and writes execution rows.
+- **`services/ui/`** — Vite + React 19 + TypeScript + Tailwind. Public-facing demo UI. Dev server proxies `/api/*` to the API on :8080; prod deploys behind a reverse proxy that owns the same routing.
 
 ## Data
 
