@@ -65,6 +65,26 @@ public class JobExecutorTxOps {
         return picked;
     }
 
+    // Renew a picked JobExecution's lease immediately before its handler
+    // runs. Called once per job by JobExecutor between pickBatch and
+    // handler.handle(...). Returns true if the exec is still RUNNING
+    // (handler should proceed with a fresh 5-min lease); false if the
+    // watchdog already reclaimed it during batch traversal, in which
+    // case the handler MUST be skipped to avoid duplicate side effects
+    // — attempt N+1 for the same Job may already be running on another
+    // executor tick. pickBatch stamps a lease for all N jobs off the
+    // same `now`, so when handlers run sequentially, later jobs in the
+    // batch can have expired leases by the time we reach them.
+    @Transactional
+    public boolean startAttempt(UUID execId, OffsetDateTime now) {
+        JobExecution exec = jobExecutionRepository.findByIdForUpdate(execId).orElse(null);
+        if (exec == null || exec.getStatus() != JobExecutionStatus.RUNNING) {
+            return false;
+        }
+        exec.setLeaseExpiresAt(now.plusMinutes(5));
+        return true;
+    }
+
     // Handler returned. Lock the JobExecution first (matching the
     // watchdog's exec-then-job order to avoid deadlock), then re-lock
     // the Job. If the execution is no longer RUNNING, the watchdog

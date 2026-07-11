@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,6 +49,10 @@ class JobExecutorTest {
     void setUp() {
         executor = new JobExecutor(txOps, handlerRegistry, fixedClock);
         ReflectionTestUtils.setField(executor, "batchSize", 10);
+        // Default: attempt is still RUNNING so the handler proceeds.
+        // The skip-path test overrides this to return false. Lenient
+        // because the empty-batch test never invokes runOne.
+        lenient().when(txOps.startAttempt(any(UUID.class), any(OffsetDateTime.class))).thenReturn(true);
     }
 
     @Test
@@ -119,6 +124,28 @@ class JobExecutorTest {
         int processed = executor.processPending();
 
         assertThat(processed).isZero();
+        verify(txOps, never()).completeSuccess(any(), any(), anyInt(), any());
+        verify(txOps, never()).completeFailure(any(), any(), anyInt(), any(), any());
+        verify(txOps, never()).completeMissingHandler(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void processPending_skipsHandlerAndComplete_whenStartAttemptReturnsFalse() throws Exception {
+        // Simulates: watchdog reclaimed this attempt to TIMED_OUT while
+        // an earlier job in the batch was running. Executor must skip
+        // both the handler call (no duplicate side effects) and every
+        // complete method (nothing to finalize — watchdog already did).
+        PickedJob picked = pickedJob();
+        stubPicked(List.of(picked));
+        when(txOps.startAttempt(eq(picked.execId()), any(OffsetDateTime.class))).thenReturn(false);
+
+        int processed = executor.processPending();
+
+        // Job was picked (counted), but handler never ran and no
+        // complete method fired.
+        assertThat(processed).isEqualTo(1);
+        verify(handlerRegistry, never()).handlerFor(any());
+        verify(handler, never()).handle(any());
         verify(txOps, never()).completeSuccess(any(), any(), anyInt(), any());
         verify(txOps, never()).completeFailure(any(), any(), anyInt(), any(), any());
         verify(txOps, never()).completeMissingHandler(any(), any(), any(), anyInt());
