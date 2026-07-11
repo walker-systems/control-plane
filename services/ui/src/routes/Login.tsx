@@ -34,6 +34,7 @@ export function Login() {
       const resp = await api<LoginResponse>('/api/auth/login', {
         method: 'POST',
         body: { email, password },
+        auth: false,
       })
       setSession({
         accessToken: resp.accessToken,

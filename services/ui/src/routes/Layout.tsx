@@ -1,11 +1,19 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/lib/auth-store'
+import { signOut } from '@/lib/auth'
 import { Button } from '@/components/ui/Button'
 
 export function Layout() {
   const user = useAuthStore((s) => s.user)
-  const clear = useAuthStore((s) => s.clear)
+  const [signingOut, setSigningOut] = useState(false)
   const navigate = useNavigate()
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    await signOut()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="min-h-full flex flex-col">
@@ -24,12 +32,10 @@ export function Layout() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                clear()
-                navigate('/login', { replace: true })
-              }}
+              onClick={handleSignOut}
+              disabled={signingOut}
             >
-              Sign out
+              {signingOut ? 'Signing out…' : 'Sign out'}
             </Button>
           </div>
         </div>
