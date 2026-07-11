@@ -76,4 +76,13 @@ public interface JobExecutionRepository extends JpaRepository<JobExecution, UUID
             """)
     List<JobExecution> findExpiredForUpdate(
             @Param("cutoff") OffsetDateTime cutoff, Pageable pageable);
+
+    // Row-locked lookup by id. The executor's complete phase calls this
+    // first (before locking the parent Job) so its lock order matches
+    // the watchdog's exec-then-job ordering. Blocking, not SKIP LOCKED —
+    // if the watchdog is currently reclaiming this row we want to wait
+    // for it to finish and then see the updated status, not skip past.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT je FROM JobExecution je WHERE je.id = :id")
+    Optional<JobExecution> findByIdForUpdate(@Param("id") UUID id);
 }

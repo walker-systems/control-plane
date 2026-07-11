@@ -122,7 +122,7 @@ class JobExecutorTxOpsTest {
         Job job = runningJob(UUID.randomUUID(), 3);
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeSuccess(job.getId(), exec.getId(), 1, "done");
 
@@ -141,7 +141,7 @@ class JobExecutorTxOpsTest {
         Job job = runningJob(UUID.randomUUID(), 3);
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeFailure(job.getId(), exec.getId(), 1, "boom", NOW);
 
@@ -163,7 +163,7 @@ class JobExecutorTxOpsTest {
         Job job = runningJob(UUID.randomUUID(), 3);
         JobExecution exec = runningExecution(job, 4);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeFailure(job.getId(), exec.getId(), 4, "boom", NOW);
 
@@ -184,7 +184,7 @@ class JobExecutorTxOpsTest {
         job.setCancelRequestedAt(NOW.minusSeconds(2));
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeSuccess(job.getId(), exec.getId(), 1, "done");
 
@@ -205,7 +205,7 @@ class JobExecutorTxOpsTest {
         job.setCancelRequestedAt(NOW.minusSeconds(2));
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeFailure(job.getId(), exec.getId(), 1, "boom", NOW);
 
@@ -227,7 +227,7 @@ class JobExecutorTxOpsTest {
         job.setCancelRequestedAt(NOW.minusSeconds(2));
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeMissingHandler(job.getId(), exec.getId(), JobType.CRM_SYNC, 1);
 
@@ -240,6 +240,57 @@ class JobExecutorTxOpsTest {
                 eq(AuditEventType.JOB_DEAD_LETTERED), any(), any(), any(), any());
     }
 
+    // --- already-finalized bailout -------------------------------------
+    //
+    // Race: handler ran past its 5-min lease, watchdog reclaimed the
+    // JobExecution to TIMED_OUT, then the handler finally returned and
+    // the executor tries to finalize. The complete methods must be
+    // no-ops — otherwise we overwrite the watchdog's outcome and (worse)
+    // stomp on the parent Job while attempt N+1 may already be running.
+
+    @Test
+    void completeSuccess_isNoOp_whenExecutionAlreadyTimedOut() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        JobExecution exec = runningExecution(job, 1);
+        exec.setStatus(JobExecutionStatus.TIMED_OUT);
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeSuccess(job.getId(), exec.getId(), 1, "done");
+
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.TIMED_OUT);
+        // Job never even loaded — Job lock was never acquired.
+        verify(jobRepository, never()).findByIdWithRelationsForUpdate(any());
+        verify(auditEventService, never()).recordWithActor(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void completeFailure_isNoOp_whenExecutionAlreadyTimedOut() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        JobExecution exec = runningExecution(job, 1);
+        exec.setStatus(JobExecutionStatus.TIMED_OUT);
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeFailure(job.getId(), exec.getId(), 1, "boom", NOW);
+
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.TIMED_OUT);
+        verify(jobRepository, never()).findByIdWithRelationsForUpdate(any());
+        verify(auditEventService, never()).recordWithActor(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void completeMissingHandler_isNoOp_whenExecutionAlreadyTimedOut() {
+        Job job = runningJob(UUID.randomUUID(), 3);
+        JobExecution exec = runningExecution(job, 1);
+        exec.setStatus(JobExecutionStatus.TIMED_OUT);
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
+
+        txOps.completeMissingHandler(job.getId(), exec.getId(), JobType.CRM_SYNC, 1);
+
+        assertThat(exec.getStatus()).isEqualTo(JobExecutionStatus.TIMED_OUT);
+        verify(jobRepository, never()).findByIdWithRelationsForUpdate(any());
+        verify(auditEventService, never()).recordWithActor(any(), any(), any(), any(), any());
+    }
+
     // --- completeMissingHandler ----------------------------------------
 
     @Test
@@ -247,7 +298,7 @@ class JobExecutorTxOpsTest {
         Job job = runningJob(UUID.randomUUID(), 3);
         JobExecution exec = runningExecution(job, 1);
         when(jobRepository.findByIdWithRelationsForUpdate(job.getId())).thenReturn(Optional.of(job));
-        when(jobExecutionRepository.findById(exec.getId())).thenReturn(Optional.of(exec));
+        when(jobExecutionRepository.findByIdForUpdate(exec.getId())).thenReturn(Optional.of(exec));
 
         txOps.completeMissingHandler(job.getId(), exec.getId(), JobType.CRM_SYNC, 1);
 

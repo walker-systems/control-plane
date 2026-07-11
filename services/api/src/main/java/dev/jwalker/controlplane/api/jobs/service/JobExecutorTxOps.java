@@ -65,18 +65,29 @@ public class JobExecutorTxOps {
         return picked;
     }
 
-    // Handler returned. Re-lock the Job, mark the JobExecution SUCCEEDED
-    // (that's the attempt's actual outcome — preserved regardless of
-    // cancel), and transition the Job. If cancel was requested during
-    // handler execution, the Job goes to CANCELLED and JOB_CANCELLED
-    // fires with attemptOutcome=SUCCEEDED. Otherwise JOB_SUCCEEDED
-    // fires as usual.
+    // Handler returned. Lock the JobExecution first (matching the
+    // watchdog's exec-then-job order to avoid deadlock), then re-lock
+    // the Job. If the execution is no longer RUNNING, the watchdog
+    // already reclaimed this attempt while the handler was running —
+    // its outcome and audit already fired, and a follow-up attempt may
+    // already be in flight against the same Job. Bail out without
+    // touching either row. Otherwise mark the JobExecution SUCCEEDED
+    // (the attempt's actual outcome — preserved regardless of cancel)
+    // and transition the Job. If cancel was requested during handler
+    // execution, the Job goes to CANCELLED and JOB_CANCELLED fires with
+    // attemptOutcome=SUCCEEDED. Otherwise JOB_SUCCEEDED fires as usual.
     @Transactional
     public void completeSuccess(UUID jobId, UUID execId, int attemptNumber, String summary) {
+        JobExecution exec = jobExecutionRepository.findByIdForUpdate(execId).orElseThrow(
+                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
+        if (exec.getStatus() != JobExecutionStatus.RUNNING) {
+            log.info("Skipping completeSuccess for exec {} (job {}) — status is {}, "
+                    + "attempt already finalized (likely by watchdog)",
+                    execId, jobId, exec.getStatus());
+            return;
+        }
         Job job = jobRepository.findByIdWithRelationsForUpdate(jobId).orElseThrow(
                 () -> new IllegalStateException("Job " + jobId + " missing at completion"));
-        JobExecution exec = jobExecutionRepository.findById(execId).orElseThrow(
-                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
 
         exec.markSucceeded(summary);
 
@@ -101,10 +112,16 @@ public class JobExecutorTxOps {
     @Transactional
     public void completeFailure(
             UUID jobId, UUID execId, int attemptNumber, String errorMessage, OffsetDateTime now) {
+        JobExecution exec = jobExecutionRepository.findByIdForUpdate(execId).orElseThrow(
+                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
+        if (exec.getStatus() != JobExecutionStatus.RUNNING) {
+            log.info("Skipping completeFailure for exec {} (job {}) — status is {}, "
+                    + "attempt already finalized (likely by watchdog)",
+                    execId, jobId, exec.getStatus());
+            return;
+        }
         Job job = jobRepository.findByIdWithRelationsForUpdate(jobId).orElseThrow(
                 () -> new IllegalStateException("Job " + jobId + " missing at completion"));
-        JobExecution exec = jobExecutionRepository.findById(execId).orElseThrow(
-                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
 
         exec.markFailed(errorMessage);
 
@@ -139,10 +156,16 @@ public class JobExecutorTxOps {
     @Transactional
     public void completeMissingHandler(
             UUID jobId, UUID execId, JobType type, int attemptNumber) {
+        JobExecution exec = jobExecutionRepository.findByIdForUpdate(execId).orElseThrow(
+                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
+        if (exec.getStatus() != JobExecutionStatus.RUNNING) {
+            log.info("Skipping completeMissingHandler for exec {} (job {}) — status is {}, "
+                    + "attempt already finalized (likely by watchdog)",
+                    execId, jobId, exec.getStatus());
+            return;
+        }
         Job job = jobRepository.findByIdWithRelationsForUpdate(jobId).orElseThrow(
                 () -> new IllegalStateException("Job " + jobId + " missing at completion"));
-        JobExecution exec = jobExecutionRepository.findById(execId).orElseThrow(
-                () -> new IllegalStateException("JobExecution " + execId + " missing at completion"));
 
         String errorMessage = "No handler registered for type " + type;
         exec.markFailed(errorMessage);
