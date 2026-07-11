@@ -5,6 +5,18 @@ spring:
     virtual:
       enabled: true
 
+  task:
+    scheduling:
+      # One thread per @Scheduled task so a slow tick can't hold up the
+      # others. We currently run three: schedule materializer, executor,
+      # watchdog. Anything below 3 serializes them onto one thread; with
+      # simulated handlers running for up to ~160s per batch that would
+      # push the watchdog well past its 60s tick target. 5 leaves
+      # headroom for future scheduled jobs without needing another
+      # config bump.
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:5}
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:control_plane}
     username: ${DB_USERNAME:controlplane}
