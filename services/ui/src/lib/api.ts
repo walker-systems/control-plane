@@ -51,9 +51,20 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
     // (token expired, revoked, or user deleted). Clear it so the
     // router lands the user on /login instead of trapping them in
     // the protected shell with an unbroken loop of failing polls.
+    //
     // Only fires on authenticated requests; unauth calls (login,
     // refresh, logout) surface 401 as a normal auth error.
-    if (res.status === 401 && auth && token) {
+    //
+    // Also gated on the store still holding the same token we
+    // captured before fetch(): if a fresh login raced this slow
+    // request, the 401 we just got belongs to the *old* session
+    // and must not wipe the new one.
+    if (
+      res.status === 401 &&
+      auth &&
+      token &&
+      useAuthStore.getState().accessToken === token
+    ) {
       useAuthStore.getState().clear()
     }
     throw new ApiError(res.status, responseBody)
