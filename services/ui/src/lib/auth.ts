@@ -43,6 +43,31 @@ export async function signOut(): Promise<void> {
 // needed. If someone gets promoted server-side, their next token
 // (issued via refresh or re-login) will carry the new roles claim
 // and this call will pick it up on the following boot.
+// Server-side session validation on app boot. Complements the local
+// isJwtExpired() check: catches tokens the API would reject for
+// reasons the client can't verify locally — JWT secret rotation,
+// server-side revocation, tampering that happens to leave the
+// payload parseable.
+//
+// We deliberately fire this against /api/users/me because it's the
+// cheapest authenticated GET we have. The response body is thrown
+// away — reading roles from /me was the original reason we removed
+// this call, so restoring it purely for the 401 path means the
+// UI's role source of truth (JWT claim) is unchanged.
+//
+// The api() 401 handler does the actual clearing (with the
+// token-race guard). Non-401 errors are ignored — a network hiccup
+// or transient 5xx shouldn't sign the user out.
+export async function pingSession(): Promise<void> {
+  const token = useAuthStore.getState().accessToken
+  if (!token) return
+  try {
+    await api('/api/users/me')
+  } catch {
+    // 401 was handled by api(); anything else is safe to ignore.
+  }
+}
+
 export function hydrateSession(): void {
   const state = useAuthStore.getState()
   const token = state.accessToken
