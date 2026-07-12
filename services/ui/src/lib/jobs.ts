@@ -3,6 +3,7 @@ import type {
   AuditEventResponse,
   JobExecutionResponse,
   JobResponse,
+  JobStatsResponse,
   JobStatus,
   JobType,
   Page,
@@ -45,4 +46,8 @@ export function listExecutions(jobId: string): Promise<JobExecutionResponse[]> {
 
 export function listJobAudit(jobId: string): Promise<Page<AuditEventResponse>> {
   return api<Page<AuditEventResponse>>('/api/audit/target/Job/' + jobId)
+}
+
+export function getJobStats(): Promise<JobStatsResponse> {
+  return api<JobStatsResponse>('/api/jobs/stats')
 }

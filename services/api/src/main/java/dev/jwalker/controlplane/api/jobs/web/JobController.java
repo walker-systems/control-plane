@@ -8,6 +8,7 @@ import dev.jwalker.controlplane.api.jobs.service.JobService;
 import dev.jwalker.controlplane.api.jobs.service.JobStateException;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
+import dev.jwalker.controlplane.api.jobs.web.dto.JobStatsResponse;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -47,6 +48,11 @@ public class JobController {
         return ResponseEntity
                 .created(URI.create("/api/jobs/" + response.id()))
                 .body(response);
+    }
+
+    @GetMapping("/stats")
+    public JobStatsResponse stats(@AuthenticationPrincipal Jwt jwt) {
+        return jobService.stats(AuthenticatedCaller.from(jwt));
     }
 
     @GetMapping("/{id}")

@@ -10,8 +10,10 @@ import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
 import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository.JobAttemptCount;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
+import dev.jwalker.controlplane.api.jobs.repository.JobRepository.JobStatusCount;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
+import dev.jwalker.controlplane.api.jobs.web.dto.JobStatsResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
 import java.time.OffsetDateTime;
@@ -91,6 +93,17 @@ public class JobService {
         // aren't returned by the grouped query — getOrDefault fills 0.
         Map<UUID, Long> counts = executionCountsFor(jobPage.getContent());
         return jobPage.map(job -> JobResponse.from(job, counts.getOrDefault(job.getId(), 0L)));
+    }
+
+    // Counts by JobStatus for the caller's visible jobs. USER role sees
+    // their own; OPERATOR/ADMIN see all. Every status is represented in
+    // the response even when its count is zero — the DTO fills gaps.
+    @Transactional(readOnly = true)
+    public JobStatsResponse stats(AuthenticatedCaller caller) {
+        UUID ownerFilter = caller.isPrivileged() ? null : caller.userId();
+        Map<JobStatus, Long> raw = jobRepository.countByStatus(ownerFilter).stream()
+                .collect(Collectors.toMap(JobStatusCount::getStatus, JobStatusCount::getCount));
+        return JobStatsResponse.from(raw);
     }
 
     @Transactional

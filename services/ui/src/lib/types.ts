@@ -82,3 +82,10 @@ export interface Page<T> {
   first: boolean
   last: boolean
 }
+
+// GET /api/jobs/stats — counts by JobStatus. Every JobStatus is
+// present in the map even when count is zero (the API pads gaps),
+// so tiles can render without null-checking each key.
+export interface JobStatsResponse {
+  counts: Record<JobStatus, number>
+}

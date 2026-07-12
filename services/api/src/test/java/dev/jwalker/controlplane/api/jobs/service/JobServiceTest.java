@@ -18,8 +18,10 @@ import dev.jwalker.controlplane.api.jobs.model.JobType;
 import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository;
 import dev.jwalker.controlplane.api.jobs.repository.JobExecutionRepository.JobAttemptCount;
 import dev.jwalker.controlplane.api.jobs.repository.JobRepository;
+import dev.jwalker.controlplane.api.jobs.repository.JobRepository.JobStatusCount;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobCreateRequest;
 import dev.jwalker.controlplane.api.jobs.web.dto.JobResponse;
+import dev.jwalker.controlplane.api.jobs.web.dto.JobStatsResponse;
 import dev.jwalker.controlplane.api.users.model.User;
 import dev.jwalker.controlplane.api.users.model.UserStatus;
 import dev.jwalker.controlplane.api.users.repository.UserRepository;
@@ -427,6 +429,64 @@ class JobServiceTest {
         assertThat(result.getContent().get(1).attemptCount()).isZero();
         // Single bulk query — no per-job COUNT calls.
         verify(jobExecutionRepository, never()).countByJob_Id(any());
+    }
+
+    // --- stats -----------------------------------------------------
+
+    @Test
+    void stats_filtersToOwnerJobs_forUserRole() {
+        when(jobRepository.countByStatus(owner.getId())).thenReturn(List.of(
+                statusCount(JobStatus.PENDING, 2L),
+                statusCount(JobStatus.RUNNING, 1L),
+                statusCount(JobStatus.SUCCEEDED, 5L)));
+
+        JobStatsResponse resp = jobService.stats(ownerCaller);
+
+        // Only the owner's counts were requested — no null-filter call.
+        verify(jobRepository).countByStatus(owner.getId());
+        verify(jobRepository, never()).countByStatus(null);
+        assertThat(resp.counts()).containsEntry(JobStatus.PENDING, 2L);
+        assertThat(resp.counts()).containsEntry(JobStatus.RUNNING, 1L);
+        assertThat(resp.counts()).containsEntry(JobStatus.SUCCEEDED, 5L);
+    }
+
+    @Test
+    void stats_returnsAllJobs_forPrivilegedCaller() {
+        when(jobRepository.countByStatus(null)).thenReturn(List.of(
+                statusCount(JobStatus.PENDING, 10L),
+                statusCount(JobStatus.DEAD_LETTER, 3L)));
+
+        JobStatsResponse resp = jobService.stats(operatorCaller);
+
+        // Null owner filter means "across all owners".
+        verify(jobRepository).countByStatus(null);
+        assertThat(resp.counts()).containsEntry(JobStatus.PENDING, 10L);
+        assertThat(resp.counts()).containsEntry(JobStatus.DEAD_LETTER, 3L);
+    }
+
+    @Test
+    void stats_populatesZerosForMissingStatuses() {
+        // Repo returns only PENDING; every other status must show 0
+        // in the response so the UI can render tiles without null
+        // checks.
+        when(jobRepository.countByStatus(owner.getId())).thenReturn(List.of(
+                statusCount(JobStatus.PENDING, 4L)));
+
+        JobStatsResponse resp = jobService.stats(ownerCaller);
+
+        for (JobStatus status : JobStatus.values()) {
+            assertThat(resp.counts()).containsKey(status);
+        }
+        assertThat(resp.counts().get(JobStatus.PENDING)).isEqualTo(4L);
+        assertThat(resp.counts().get(JobStatus.RUNNING)).isEqualTo(0L);
+        assertThat(resp.counts().get(JobStatus.CANCELLED)).isEqualTo(0L);
+    }
+
+    private static JobStatusCount statusCount(JobStatus status, long count) {
+        return new JobStatusCount() {
+            @Override public JobStatus getStatus() { return status; }
+            @Override public long getCount() { return count; }
+        };
     }
 
     private Job pendingJob(UUID jobId) {
