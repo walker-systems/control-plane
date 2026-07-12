@@ -7,6 +7,7 @@ import { persist } from 'zustand/middleware'
 
 export interface AuthUser {
   email: string
+  roles: string[]
 }
 
 interface AuthState {
@@ -14,6 +15,7 @@ interface AuthState {
   refreshToken: string | null
   user: AuthUser | null
   setSession: (params: { accessToken: string; refreshToken: string; user: AuthUser }) => void
+  setUser: (user: AuthUser) => void
   clear: () => void
 }
 
@@ -25,6 +27,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       setSession: ({ accessToken, refreshToken, user }) =>
         set({ accessToken, refreshToken, user }),
+      setUser: (user) => set({ user }),
       clear: () => set({ accessToken: null, refreshToken: null, user: null }),
     }),
     { name: 'cp-auth' },

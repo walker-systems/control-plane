@@ -1,5 +1,42 @@
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
+import { getMe } from '@/lib/users'
+
+// One-shot on app boot: if a persisted session exists, refresh the
+// user record from /api/users/me. Two reasons we need this:
+//
+//  1. Legacy sessions in localStorage (persisted before we added
+//     roles) hydrate as { email } with no roles. Without this call,
+//     role-gated UI (audit trail) would stay hidden for privileged
+//     users until they signed out and back in.
+//  2. Server-side role changes (a promote/revoke by an admin) take
+//     effect on the next reload rather than the next full re-login.
+//
+// If the token is invalid the API returns 401 — we clear the session
+// so the router lands the user on /login rather than showing a
+// half-authenticated shell.
+export async function hydrateSession(): Promise<void> {
+  const token = useAuthStore.getState().accessToken
+  if (!token) return
+  try {
+    const me = await getMe()
+    // A user may have logged out or into a different account while
+    // this /me was in flight — applying the response now would
+    // clobber the current session. Only proceed if the token in the
+    // store is still the one this call was issued for.
+    if (useAuthStore.getState().accessToken !== token) return
+    useAuthStore.getState().setUser({ email: me.email, roles: me.roles })
+  } catch (e) {
+    // Same guard on failure: don't clear a *fresh* valid session
+    // just because our *old* token's /me returned 401.
+    if (useAuthStore.getState().accessToken !== token) return
+    if (e instanceof ApiError && e.status === 401) {
+      useAuthStore.getState().clear()
+    } else {
+      console.warn('hydrateSession failed', e)
+    }
+  }
+}
 
 // Full sign-out: revoke the refresh token server-side, then wipe
 // local state. The API call is fire-and-forget from the UI's
