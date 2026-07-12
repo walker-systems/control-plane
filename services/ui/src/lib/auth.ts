@@ -20,8 +20,16 @@ export async function hydrateSession(): Promise<void> {
   if (!token) return
   try {
     const me = await getMe()
+    // A user may have logged out or into a different account while
+    // this /me was in flight — applying the response now would
+    // clobber the current session. Only proceed if the token in the
+    // store is still the one this call was issued for.
+    if (useAuthStore.getState().accessToken !== token) return
     useAuthStore.getState().setUser({ email: me.email, roles: me.roles })
   } catch (e) {
+    // Same guard on failure: don't clear a *fresh* valid session
+    // just because our *old* token's /me returned 401.
+    if (useAuthStore.getState().accessToken !== token) return
     if (e instanceof ApiError && e.status === 401) {
       useAuthStore.getState().clear()
     } else {
