@@ -646,6 +646,55 @@ class JobControllerIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void stats_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/api/jobs/stats"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void stats_forUser_returnsOnlyOwnJobCounts() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        // Alice: 2 PENDING, 1 SUCCEEDED. Bob: 1 DEAD_LETTER.
+        seedJob("alice@example.com", JobStatus.PENDING);
+        seedJob("alice@example.com", JobStatus.PENDING);
+        seedJob("alice@example.com", JobStatus.SUCCEEDED);
+        seedJob("bob@example.com", JobStatus.DEAD_LETTER);
+
+        String aliceToken = loginAndExtractAccess("alice@example.com", "password");
+
+        mockMvc.perform(get("/api/jobs/stats")
+                        .header("Authorization", "Bearer " + aliceToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.counts.PENDING").value(2))
+                .andExpect(jsonPath("$.counts.SUCCEEDED").value(1))
+                // Bob's job invisible to alice.
+                .andExpect(jsonPath("$.counts.DEAD_LETTER").value(0))
+                // Every status present with a numeric count.
+                .andExpect(jsonPath("$.counts.RUNNING").value(0))
+                .andExpect(jsonPath("$.counts.FAILED").value(0))
+                .andExpect(jsonPath("$.counts.CANCELLED").value(0));
+    }
+
+    @Test
+    void stats_forOperator_returnsCountsAcrossAllOwners() throws Exception {
+        seedUser("alice@example.com", "password");
+        seedUser("bob@example.com", "password");
+        seedUserWithRole("ops@example.com", "password", "OPERATOR");
+        seedJob("alice@example.com", JobStatus.PENDING);
+        seedJob("bob@example.com", JobStatus.PENDING);
+        seedJob("bob@example.com", JobStatus.DEAD_LETTER);
+
+        String opsToken = loginAndExtractAccess("ops@example.com", "password");
+
+        mockMvc.perform(get("/api/jobs/stats")
+                        .header("Authorization", "Bearer " + opsToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.counts.PENDING").value(2))
+                .andExpect(jsonPath("$.counts.DEAD_LETTER").value(1));
+    }
+
     private void seedUser(String email, String rawPassword) {
         seedUserWithRole(email, rawPassword, "USER");
     }

@@ -27,6 +27,25 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
     List<Job> findByOwnerAndStatus(User owner, JobStatus status);
 
+    // One-row-per-status counts used by GET /api/jobs/stats. Passing
+    // ownerId = null (privileged callers) removes the owner filter and
+    // aggregates across all jobs. Statuses with zero jobs won't appear
+    // in the result — the service fills those in with 0 so every
+    // JobStatus is represented in the response.
+    @Query("""
+            SELECT j.status AS status, COUNT(j) AS count
+            FROM Job j
+            WHERE (:ownerId IS NULL OR j.owner.id = :ownerId)
+            GROUP BY j.status
+            """)
+    List<JobStatusCount> countByStatus(@Param("ownerId") UUID ownerId);
+
+    // Spring Data projection for the grouped-count query above.
+    interface JobStatusCount {
+        JobStatus getStatus();
+        long getCount();
+    }
+
     List<Job> findBySourceScheduleId(UUID sourceScheduleId);
 
     Optional<Job> findByIdempotencyKey(String idempotencyKey);
