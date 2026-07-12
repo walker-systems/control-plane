@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
-import { getMe } from '@/lib/users'
+import { decodeJwtRoles } from '@/lib/jwt'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
@@ -40,23 +40,15 @@ export function Login() {
         body: { email, password },
         auth: false,
       })
-      // Set the session first so the follow-up /me call carries the
-      // bearer. The user record is provisional (submitted email, no
-      // roles) — /me replaces it with the canonical record.
+      // Roles come from the JWT `roles` claim so the UI gates on the
+      // same source of truth the API authorizes against. Email comes
+      // from the form — the login response deliberately doesn't
+      // echo it.
       setSession({
         accessToken: resp.accessToken,
         refreshToken: resp.refreshToken,
-        user: { email, roles: [] },
+        user: { email, roles: decodeJwtRoles(resp.accessToken) },
       })
-      try {
-        const me = await getMe()
-        useAuthStore.getState().setUser({ email: me.email, roles: me.roles })
-      } catch (e) {
-        // A failed /me shouldn't block login — the user has a valid
-        // token and can navigate. Role-gated UI (audit trail) just
-        // stays hidden until a re-login refreshes it.
-        console.warn('failed to load /me after login', e)
-      }
       navigate(redirectTo, { replace: true })
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
