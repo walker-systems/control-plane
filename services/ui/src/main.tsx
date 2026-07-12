@@ -6,11 +6,11 @@ import { hydrateSession } from '@/lib/auth'
 import App from '@/App'
 import './index.css'
 
-// Fire-and-forget: refresh the persisted session against /me so any
-// stored user record without roles (or with stale roles) gets
-// hydrated before the router-level auth checks matter. Not awaited —
-// we want the first paint to happen immediately.
-void hydrateSession()
+// Synchronous: fill in the roles field from the access token's claims
+// for any persisted session whose stored record was written before
+// roles were tracked (or before a token refresh). Runs before render
+// so the first paint already reflects the correct role gating.
+hydrateSession()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
