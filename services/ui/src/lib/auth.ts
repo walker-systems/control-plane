@@ -1,6 +1,6 @@
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
-import { decodeJwtRoles } from '@/lib/jwt'
+import { decodeJwtRoles, isJwtExpired } from '@/lib/jwt'
 
 // Full sign-out: revoke the refresh token server-side, then wipe
 // local state. The API call is fire-and-forget from the UI's
@@ -48,6 +48,16 @@ export function hydrateSession(): void {
   const token = state.accessToken
   const user = state.user
   if (!token || !user) return
+  // Purely local expiry check via the JWT `exp` claim: if the
+  // persisted token expired while the app was closed, clear now
+  // so the router sends the user to /login instead of stranding
+  // them on a protected route that never fires an API call
+  // (Dashboard/Schedules today). The api() 401 handler covers the
+  // "expired mid-session" case; this covers "expired at rest".
+  if (isJwtExpired(token)) {
+    useAuthStore.getState().clear()
+    return
+  }
   const roles = decodeJwtRoles(token)
   // Legacy persisted sessions (cp-auth written before AuthUser had
   // a roles field) rehydrate as { email } — user.roles is undefined
