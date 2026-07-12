@@ -51,3 +51,11 @@ export function listJobAudit(jobId: string): Promise<Page<AuditEventResponse>> {
 export function getJobStats(): Promise<JobStatsResponse> {
   return api<JobStatsResponse>('/api/jobs/stats')
 }
+
+export function cancelJob(id: string): Promise<JobResponse> {
+  return api<JobResponse>('/api/jobs/' + id + '/cancel', { method: 'POST' })
+}
+
+export function retryJob(id: string): Promise<JobResponse> {
+  return api<JobResponse>('/api/jobs/' + id + '/retry', { method: 'POST' })
+}
