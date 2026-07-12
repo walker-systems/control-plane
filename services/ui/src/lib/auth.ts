@@ -49,10 +49,16 @@ export function hydrateSession(): void {
   const user = state.user
   if (!token || !user) return
   const roles = decodeJwtRoles(token)
-  // No-op write if nothing changed.
-  const same =
-    roles.length === user.roles.length &&
-    roles.every((r, i) => r === user.roles[i])
-  if (same) return
+  // Legacy persisted sessions (cp-auth written before AuthUser had
+  // a roles field) rehydrate as { email } — user.roles is undefined
+  // at runtime even though the type says string[]. Guard the shape
+  // and always write to normalize when it's missing.
+  const existingRoles = Array.isArray(user.roles) ? user.roles : null
+  if (existingRoles) {
+    const same =
+      roles.length === existingRoles.length &&
+      roles.every((r, i) => r === existingRoles[i])
+    if (same) return
+  }
   useAuthStore.getState().setUser({ ...user, roles })
 }
