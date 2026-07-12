@@ -1,15 +1,22 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getJob, listExecutions, listJobAudit } from '@/lib/jobs'
-import type { AuditEventResponse, JobExecutionResponse, JobResponse } from '@/lib/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { cancelJob, getJob, listExecutions, listJobAudit, retryJob } from '@/lib/jobs'
+import type { AuditEventResponse, JobExecutionResponse, JobResponse, JobStatus } from '@/lib/types'
 import { useAuthStore } from '@/lib/auth-store'
 import { canReadAudit } from '@/lib/users'
+import { ApiError } from '@/lib/api'
 import {
   ExecutionStatusBadge,
   JobStatusBadge,
   PriorityBadge,
 } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { formatAbsolute, formatRelative, shortId } from '@/lib/format'
+
+const CANCELLABLE: JobStatus[] = ['PENDING', 'RUNNING']
+const RETRYABLE: JobStatus[] = ['DEAD_LETTER']
 
 export function JobDetail() {
   const { id = '' } = useParams<{ id: string }>()
@@ -19,6 +26,9 @@ export function JobDetail() {
   // actually having a role that can read it.
   const roles = useAuthStore((s) => s.user?.roles)
   const auditVisible = canReadAudit(roles)
+  const queryClient = useQueryClient()
+  const [pending, setPending] = useState<'cancel' | 'retry' | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const jobQuery = useQuery({
     queryKey: ['job', id],
@@ -39,6 +49,45 @@ export function JobDetail() {
     enabled: !!id && auditVisible,
   })
 
+  // Invalidate everything the action might have changed so the
+  // UI reflects the outcome immediately instead of waiting for the
+  // next 3s poll tick. Also refresh the dashboard stats and the
+  // jobs list — this job's status just changed, and its owner's
+  // aggregate counts moved with it.
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['job', id] })
+    queryClient.invalidateQueries({ queryKey: ['job-executions', id] })
+    if (auditVisible) {
+      queryClient.invalidateQueries({ queryKey: ['job-audit', id] })
+    }
+    queryClient.invalidateQueries({ queryKey: ['job-stats'] })
+    queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    queryClient.invalidateQueries({ queryKey: ['jobs-recent'] })
+  }
+
+  function handleActionError(e: unknown) {
+    if (e instanceof ApiError && e.status === 409) {
+      // 409 comes from JobStateException — the status changed
+      // under us (executor picked it up, watchdog reclaimed, etc.).
+      // Refetching gives the user an updated view.
+      setActionError('Job state changed. Refreshed with the latest.')
+      invalidate()
+    } else {
+      setActionError('Action failed. Try again in a moment.')
+    }
+  }
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelJob(id),
+    onSuccess: () => { setPending(null); setActionError(null); invalidate() },
+    onError: (e) => { setPending(null); handleActionError(e) },
+  })
+  const retryMutation = useMutation({
+    mutationFn: () => retryJob(id),
+    onSuccess: () => { setPending(null); setActionError(null); invalidate() },
+    onError: (e) => { setPending(null); handleActionError(e) },
+  })
+
   if (jobQuery.isLoading) {
     return <p className="text-slate-500">Loading…</p>
   }
@@ -52,17 +101,68 @@ export function JobDetail() {
   }
 
   const job = jobQuery.data
+  const canCancel = CANCELLABLE.includes(job.status)
+  const canRetry = RETRYABLE.includes(job.status)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link to="/jobs" className="text-sm text-slate-600 hover:underline">← Jobs</Link>
         <span className="text-slate-300">/</span>
         <h1 className="text-2xl font-semibold text-slate-900">
           <span className="font-mono">{shortId(job.id)}</span>
         </h1>
         <JobStatusBadge status={job.status} />
+        <div className="ml-auto flex items-center gap-2">
+          {canCancel && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { setActionError(null); setPending('cancel') }}
+              disabled={cancelMutation.isPending}
+            >
+              Cancel job
+            </Button>
+          )}
+          {canRetry && (
+            <Button
+              size="sm"
+              onClick={() => { setActionError(null); setPending('retry') }}
+              disabled={retryMutation.isPending}
+            >
+              Retry job
+            </Button>
+          )}
+        </div>
       </div>
+
+      {actionError && (
+        <p className="text-sm text-red-600" role="alert">{actionError}</p>
+      )}
+
+      <ConfirmDialog
+        open={pending === 'cancel'}
+        title="Cancel this job?"
+        description={
+          job.status === 'RUNNING'
+            ? 'Marks the job for cancellation. If a handler is currently running, its attempt still records its outcome — the job transitions to CANCELLED at completion.'
+            : 'The job is still PENDING and will transition to CANCELLED immediately.'
+        }
+        confirmLabel="Cancel job"
+        destructive
+        busy={cancelMutation.isPending}
+        onConfirm={() => cancelMutation.mutate()}
+        onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={pending === 'retry'}
+        title="Retry this dead-lettered job?"
+        description="Transitions the job back to PENDING. The executor will pick it up on the next tick with a fresh attempt."
+        confirmLabel="Retry job"
+        busy={retryMutation.isPending}
+        onConfirm={() => retryMutation.mutate()}
+        onCancel={() => setPending(null)}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <MetadataCard job={job} />
