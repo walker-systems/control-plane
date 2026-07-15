@@ -66,9 +66,16 @@ export function ScheduleDetail() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteSchedule(id),
     onSuccess: () => {
-      // Invalidate the list so the deleted row disappears, then send
-      // the user back — there's nothing more to show on this page.
+      // Invalidate the list so the deleted row disappears. The detail
+      // caches get *removed*, not invalidated: the resource is gone,
+      // and with a 10s default staleTime a revisit to this URL would
+      // otherwise render the cached (deleted) schedule until the next
+      // poll 404s. Removal makes a revisit go straight to the
+      // not-found state. Then send the user back — there's nothing
+      // more to show on this page.
       queryClient.invalidateQueries({ queryKey: ['schedules'] })
+      queryClient.removeQueries({ queryKey: ['schedule', id] })
+      queryClient.removeQueries({ queryKey: ['schedule-jobs', id] })
       navigate('/schedules', { replace: true })
     },
     onError: (e) => { setPending(null); handleActionError(e) },
