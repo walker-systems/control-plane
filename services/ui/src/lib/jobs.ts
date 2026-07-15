@@ -12,6 +12,7 @@ import type {
 export interface ListJobsParams {
   status?: JobStatus
   type?: JobType
+  sourceScheduleId?: string
   page?: number
   size?: number
 }
@@ -30,6 +31,7 @@ export function listJobs(params: ListJobsParams = {}): Promise<Page<JobResponse>
   const qs = toQueryString({
     status: params.status,
     type: params.type,
+    sourceScheduleId: params.sourceScheduleId,
     page: params.page,
     size: params.size,
   })
