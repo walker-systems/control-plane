@@ -89,3 +89,31 @@ export interface Page<T> {
 export interface JobStatsResponse {
   counts: Record<JobStatus, number>
 }
+
+export interface JobScheduleResponse {
+  id: string
+  ownerId: string
+  ownerEmail: string
+  name: string
+  type: JobType
+  payloadJson: string
+  priority: JobPriority
+  maxRetries: number
+  cron: string
+  timezone: string
+  enabled: boolean
+  nextRunAt: string | null
+  lastEnqueuedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface JobScheduleCreateRequest {
+  name: string
+  type: JobType
+  payloadJson: string
+  priority?: JobPriority
+  maxRetries?: number
+  cron: string
+  timezone: string
+}

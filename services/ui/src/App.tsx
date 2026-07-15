@@ -3,15 +3,22 @@ import { Login } from '@/routes/Login'
 import { Dashboard } from '@/routes/Dashboard'
 import { JobsList } from '@/routes/JobsList'
 import { JobDetail } from '@/routes/JobDetail'
+import { SchedulesList } from '@/routes/SchedulesList'
+import { ScheduleDetail } from '@/routes/ScheduleDetail'
+import { ScheduleCreate } from '@/routes/ScheduleCreate'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { Layout } from '@/routes/Layout'
 
 // Route tree:
 //   /login           — public
 //   /                — Layout (protected) → Dashboard
-//     /jobs          — placeholder for Phase C.2
-//     /schedules     — placeholder for Phase C.3
+//     /jobs, /jobs/:id
+//     /schedules, /schedules/new, /schedules/:id
 //   *                — redirect to /
+//
+// /schedules/new is declared before /schedules/:id for readability
+// only — React Router v6 ranks static segments above dynamic ones
+// regardless of declaration order.
 function App() {
   return (
     <BrowserRouter>
@@ -22,23 +29,14 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/jobs" element={<JobsList />} />
             <Route path="/jobs/:id" element={<JobDetail />} />
-            <Route path="/schedules" element={<PlaceholderPage title="Schedules" />} />
+            <Route path="/schedules" element={<SchedulesList />} />
+            <Route path="/schedules/new" element={<ScheduleCreate />} />
+            <Route path="/schedules/:id" element={<ScheduleDetail />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
-  )
-}
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600">
-        Lands in the next PR.
-      </div>
-    </div>
   )
 }
 

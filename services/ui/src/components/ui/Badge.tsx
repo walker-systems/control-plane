@@ -41,3 +41,10 @@ export function ExecutionStatusBadge({ status }: { status: JobExecutionStatus })
 export function PriorityBadge({ priority }: { priority: JobPriority }) {
   return <span className={`${base} ${priorityStyle[priority]}`}>{priority}</span>
 }
+
+export function EnabledBadge({ enabled }: { enabled: boolean }) {
+  const style = enabled
+    ? 'bg-emerald-100 text-emerald-800 ring-emerald-300'
+    : 'bg-slate-200 text-slate-700 ring-slate-300'
+  return <span className={`${base} ${style}`}>{enabled ? 'ENABLED' : 'PAUSED'}</span>
+}
