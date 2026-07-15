@@ -42,7 +42,13 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
 
   let responseBody: unknown = null
   const contentType = res.headers.get('Content-Type') ?? ''
-  if (contentType.includes('application/json')) {
+  // Accept application/json *and* the +json structured-suffix family
+  // (RFC 6839). Spring's RFC 9457 error responses come back as
+  // application/problem+json — without the +json branch those bodies
+  // never parse, so ApiError.body stays null and callers that read it
+  // (e.g. the schedule form's cron/timezone/duplicate-name messages)
+  // always fall through to their generic error copy.
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
     responseBody = await res.json().catch(() => null)
   }
 
