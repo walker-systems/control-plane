@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SyntheticEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth-store'
@@ -30,7 +30,7 @@ export function Login() {
   // ProtectedRoute when it kicked us here.
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/'
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: SyntheticEvent) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
