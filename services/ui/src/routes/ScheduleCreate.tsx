@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createSchedule } from '@/lib/schedules'
@@ -55,7 +55,7 @@ export function ScheduleCreate() {
     onError: (e) => setError(describeError(e)),
   })
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SyntheticEvent) {
     e.preventDefault()
     setError(null)
     // Validate the payload client-side so the user gets an immediate,
