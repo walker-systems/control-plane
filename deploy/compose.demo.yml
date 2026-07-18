@@ -72,8 +72,13 @@ services:
       JWT_SECRET: demo-only-jwt-secret-not-for-production-use
       EXECUTOR_ENABLED: "true"
       BOOTSTRAP_ENABLED: "true"
-      BOOTSTRAP_ADMIN_EMAIL: demo@control-plane.dev
-      BOOTSTRAP_ADMIN_PASSWORD: demo-password
+      # Same split as production: a private-ish admin, and the shared
+      # demo user (OPERATOR) that the login page's "Explore the demo"
+      # button signs in as.
+      BOOTSTRAP_ADMIN_EMAIL: admin@control-plane.local
+      BOOTSTRAP_ADMIN_PASSWORD: demo-admin-password
+      BOOTSTRAP_DEMO_EMAIL: demo@control-plane.dev
+      BOOTSTRAP_DEMO_PASSWORD: demo-password
 
   web:
     image: ghcr.io/walker-systems/control-plane-web:latest

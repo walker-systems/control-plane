@@ -33,9 +33,13 @@ class AdminBootstrapperTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    private static BootstrapProperties adminOnly(String email, String password) {
+        return new BootstrapProperties(true, email, password, "", "");
+    }
+
     @Test
     void run_createsAdminUser_whenNoneExists() {
-        BootstrapProperties props = new BootstrapProperties(true, "admin@example.com", "secret-pw");
+        BootstrapProperties props = adminOnly("admin@example.com", "secret-pw");
         Role adminRole = new Role(UUID.randomUUID(), "ADMIN");
 
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(false);
@@ -56,7 +60,7 @@ class AdminBootstrapperTest {
 
     @Test
     void run_skips_whenAdminAlreadyExists() {
-        BootstrapProperties props = new BootstrapProperties(true, "admin@example.com", "secret-pw");
+        BootstrapProperties props = adminOnly("admin@example.com", "secret-pw");
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
 
         AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
@@ -68,7 +72,7 @@ class AdminBootstrapperTest {
 
     @Test
     void run_skips_whenEmailBlank() {
-        BootstrapProperties props = new BootstrapProperties(true, "", "secret-pw");
+        BootstrapProperties props = adminOnly("", "secret-pw");
 
         AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
         bootstrapper.run(null);
@@ -79,7 +83,7 @@ class AdminBootstrapperTest {
 
     @Test
     void run_skips_whenPasswordBlank() {
-        BootstrapProperties props = new BootstrapProperties(true, "admin@example.com", "  ");
+        BootstrapProperties props = adminOnly("admin@example.com", "  ");
 
         AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
         bootstrapper.run(null);
@@ -90,7 +94,7 @@ class AdminBootstrapperTest {
 
     @Test
     void run_throws_whenAdminRoleMissing() {
-        BootstrapProperties props = new BootstrapProperties(true, "admin@example.com", "secret-pw");
+        BootstrapProperties props = adminOnly("admin@example.com", "secret-pw");
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(false);
         when(roleRepository.findByName("ADMIN")).thenReturn(Optional.empty());
 
@@ -99,6 +103,59 @@ class AdminBootstrapperTest {
         assertThatThrownBy(() -> bootstrapper.run(null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ADMIN");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void run_createsDemoUserWithOperatorRole_whenDemoPropsSet() {
+        BootstrapProperties props = new BootstrapProperties(
+                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw");
+        Role adminRole = new Role(UUID.randomUUID(), "ADMIN");
+        Role operatorRole = new Role(UUID.randomUUID(), "OPERATOR");
+
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
+        when(userRepository.existsByEmail("demo@example.com")).thenReturn(false);
+        when(roleRepository.findByName("OPERATOR")).thenReturn(Optional.of(operatorRole));
+        when(passwordEncoder.encode("demo-pw")).thenReturn("demo-hashed");
+
+        AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
+        bootstrapper.run(null);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        User saved = captor.getValue();
+        assertThat(saved.getEmail()).isEqualTo("demo@example.com");
+        assertThat(saved.getPasswordHash()).isEqualTo("demo-hashed");
+        assertThat(saved.getRoles()).containsExactly(operatorRole);
+        assertThat(saved.getRoles()).doesNotContain(adminRole);
+    }
+
+    @Test
+    void run_skipsDemoUser_whenAlreadyExists() {
+        BootstrapProperties props = new BootstrapProperties(
+                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw");
+
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
+        when(userRepository.existsByEmail("demo@example.com")).thenReturn(true);
+
+        AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
+        bootstrapper.run(null);
+
+        verify(userRepository, never()).save(any());
+        verify(roleRepository, never()).findByName(any());
+    }
+
+    @Test
+    void run_skipsDemoUser_whenOnlyEmailSet() {
+        BootstrapProperties props = new BootstrapProperties(
+                true, "admin@example.com", "secret-pw", "demo@example.com", "");
+
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
+
+        AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
+        bootstrapper.run(null);
+
+        verify(userRepository, never()).existsByEmail("demo@example.com");
         verify(userRepository, never()).save(any());
     }
 }
