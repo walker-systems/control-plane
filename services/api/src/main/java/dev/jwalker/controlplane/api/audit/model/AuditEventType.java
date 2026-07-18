@@ -7,6 +7,7 @@ public enum AuditEventType {
     TOKEN_REFRESHED,
     USER_CREATED,
     USER_ROLE_CHANGED,
+    USER_STATUS_CHANGED,
     JOB_CREATED,
     JOB_CANCELLED,
     JOB_RETRIED,
