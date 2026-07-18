@@ -8,8 +8,9 @@ A distributed job orchestration platform: Postgres-backed job queue with
 priorities, retries, cron schedules, lease-based crash recovery, and a
 live operations UI.
 
-**Live demo: [control-plane.dev](https://control-plane.dev)** — deployed
-automatically on every merge to `main`.
+**Live demo: [control-plane.dev](https://control-plane.dev)** — click
+**"Explore the demo"** on the login page: no signup, no credentials, one
+click. Deployed automatically on every merge to `main`.
 
 ![Dashboard](docs/images/dashboard.png)
 
@@ -55,8 +56,9 @@ One command — pulls published images, no JDK or Node required:
 docker compose -f deploy/compose.demo.yml up -d
 ```
 
-Open **http://localhost:8000** and log in as `demo@control-plane.dev` /
-`demo-password`. Then give the dashboard something to show:
+Open **http://localhost:8000** and click **"Explore the demo"** (or log
+in as `demo@control-plane.dev` / `demo-password`). Then give the
+dashboard something to show:
 
 ```bash
 ./scripts/seed-demo.sh

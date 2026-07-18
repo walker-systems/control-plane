@@ -18,6 +18,13 @@ interface LoginResponse {
   expiresIn: number
 }
 
+// Shared demo account, provisioned by the API's bootstrap (OPERATOR
+// role). Deliberately public — the whole point is that a visitor can
+// explore without creating anything. Same credentials work in the
+// local demo compose and on the deployed site.
+const DEMO_EMAIL = 'demo@control-plane.dev'
+const DEMO_PASSWORD = 'demo-password'
+
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,14 +37,13 @@ export function Login() {
   // ProtectedRoute when it kicked us here.
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/'
 
-  async function onSubmit(e: SyntheticEvent) {
-    e.preventDefault()
+  async function signIn(asEmail: string, asPassword: string) {
     setError(null)
     setSubmitting(true)
     try {
       const resp = await api<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        body: { email, password },
+        body: { email: asEmail, password: asPassword },
         auth: false,
       })
       // Roles come from the JWT `roles` claim so the UI gates on the
@@ -47,17 +53,33 @@ export function Login() {
       setSession({
         accessToken: resp.accessToken,
         refreshToken: resp.refreshToken,
-        user: { email, roles: decodeJwtRoles(resp.accessToken) },
+        user: { email: asEmail, roles: decodeJwtRoles(resp.accessToken) },
       })
       navigate(redirectTo, { replace: true })
+      return true
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError('Invalid email or password.')
       } else {
         setError('Login failed. Try again.')
       }
+      return false
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function onSubmit(e: SyntheticEvent) {
+    e.preventDefault()
+    await signIn(email, password)
+  }
+
+  async function onDemoClick() {
+    const ok = await signIn(DEMO_EMAIL, DEMO_PASSWORD)
+    // The generic 401 copy would be confusing here — the visitor
+    // typed nothing. Say what actually went wrong.
+    if (!ok) {
+      setError('The demo account is not available on this instance.')
     }
   }
 
@@ -107,6 +129,27 @@ export function Login() {
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
+
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs uppercase tracking-wide text-slate-400">or</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={onDemoClick}
+            disabled={submitting}
+          >
+            Explore the demo
+          </Button>
+          <p className="text-center text-xs text-slate-500">
+            One click, no account — signs in as a shared demo user.
+          </p>
+        </div>
       </form>
     </div>
   )

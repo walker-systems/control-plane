@@ -15,6 +15,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+// Seeds well-known users on startup, idempotently: the admin account
+// (required for a usable fresh install) and, optionally, a shared
+// demo account. The demo user gets OPERATOR — it can see every job
+// and read audit trails, which is the view the public demo wants to
+// show off, without ADMIN's implication of full control.
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "app.bootstrap", name = "enabled", havingValue = "true")
@@ -23,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminBootstrapper implements ApplicationRunner {
 
     private static final String ADMIN_ROLE = "ADMIN";
+    private static final String OPERATOR_ROLE = "OPERATOR";
 
     private final BootstrapProperties props;
     private final UserRepository userRepository;
@@ -33,28 +39,36 @@ public class AdminBootstrapper implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         if (isBlank(props.adminEmail()) || isBlank(props.adminPassword())) {
-            log.warn("Bootstrap enabled but admin-email or admin-password is blank; skipping");
+            log.warn("Bootstrap enabled but admin-email or admin-password is blank; skipping admin");
+        } else {
+            ensureUser(props.adminEmail(), props.adminPassword(), ADMIN_ROLE, "admin");
+        }
+
+        // Demo user is opt-in — both properties must be set.
+        if (!isBlank(props.demoEmail()) && !isBlank(props.demoPassword())) {
+            ensureUser(props.demoEmail(), props.demoPassword(), OPERATOR_ROLE, "demo");
+        }
+    }
+
+    private void ensureUser(String email, String password, String roleName, String label) {
+        if (userRepository.existsByEmail(email)) {
+            log.info("Bootstrap {} user {} already exists; skipping", label, email);
             return;
         }
 
-        if (userRepository.existsByEmail(props.adminEmail())) {
-            log.info("Bootstrap admin user {} already exists; skipping", props.adminEmail());
-            return;
-        }
-
-        Role adminRole = roleRepository.findByName(ADMIN_ROLE)
+        Role role = roleRepository.findByName(roleName)
                 .orElseThrow(() -> new IllegalStateException(
-                        "Role " + ADMIN_ROLE + " not found; was V1 migration applied?"));
+                        "Role " + roleName + " not found; was V1 migration applied?"));
 
-        User admin = new User(
+        User user = new User(
                 null,
-                props.adminEmail(),
-                passwordEncoder.encode(props.adminPassword()),
+                email,
+                passwordEncoder.encode(password),
                 UserStatus.ACTIVE);
-        admin.addRole(adminRole);
-        userRepository.save(admin);
+        user.addRole(role);
+        userRepository.save(user);
 
-        log.info("Bootstrap created admin user {}", props.adminEmail());
+        log.info("Bootstrap created {} user {} with role {}", label, email, roleName);
     }
 
     private static boolean isBlank(String s) {

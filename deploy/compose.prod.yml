@@ -78,6 +78,17 @@ services:
       BOOTSTRAP_ENABLED: "true"
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?set BOOTSTRAP_ADMIN_EMAIL in .env}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      # Shared demo account (OPERATOR) behind the login page's
+      # "Explore the demo" button. The credentials are deliberately
+      # public — they're baked into the UI. Set both to empty in .env
+      # to disable one-click demo access on a private deployment.
+      # Single-dash interpolation (${VAR-default}, not ${VAR:-default})
+      # is what makes that disable switch work: it defaults only when
+      # the var is UNSET, so an explicit empty value in .env passes
+      # through to Spring's isBlank check instead of being replaced
+      # by the public default.
+      BOOTSTRAP_DEMO_EMAIL: ${BOOTSTRAP_DEMO_EMAIL-demo@control-plane.dev}
+      BOOTSTRAP_DEMO_PASSWORD: ${BOOTSTRAP_DEMO_PASSWORD-demo-password}
 
   web:
     image: ghcr.io/walker-systems/control-plane-web:${IMAGE_TAG:-latest}

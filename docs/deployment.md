@@ -106,9 +106,20 @@ The two GHCR packages (`control-plane-api`, `control-plane-web`) must be
 anonymously. Keep them private instead by adding a
 `docker login ghcr.io` with a read-only PAT on the droplet.
 
+## The demo account
+
+`compose.prod.yml` bootstraps a shared demo user
+(`demo@control-plane.dev`, OPERATOR role) whose credentials are baked
+into the UI's "Explore the demo" button — that's what makes the public
+demo one-click. To run a private deployment without it, set
+`BOOTSTRAP_DEMO_EMAIL=` and `BOOTSTRAP_DEMO_PASSWORD=` (both empty) in
+`.env`.
+
 ## Day-2 operations
 
-- **Deploy**: push to `main`. Or Actions → Deploy → Run workflow.
+- **Deploy**: push to `main`. Or Actions → Deploy → Run workflow. The
+  workflow also re-syncs `compose.prod.yml` to the droplet, so compose
+  changes ship with the code — only `.env` is managed by hand.
 - **Roll back**: on the droplet, set `IMAGE_TAG=<old sha>` in `.env`,
   `docker compose up -d`. Every deploy also pushes a `:<git sha>` tag
   precisely so this is possible.

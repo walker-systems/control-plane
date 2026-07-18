@@ -62,12 +62,31 @@ jobs:
     needs: build-and-push
     # The secrets context can't be referenced in `if:` conditionals
     # (per GitHub's docs) — but it IS valid in job-level env. Surface
-    # the host there and gate the step on the env var: missing secret
-    # → empty env → the step no-ops and the job stays green.
+    # the host there and gate the steps on the env var: missing secret
+    # → empty env → the steps no-op and the job stays green.
     env:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
 
     steps:
+      - name: Checkout
+        if: ${{ env.DEPLOY_HOST != '' }}
+        uses: actions/checkout@v4
+
+      # Keep the droplet's compose file in lockstep with the repo —
+      # `docker compose pull` only refreshes images, so without this,
+      # compose changes (new env vars, services, ports) would silently
+      # never reach the server.
+      - name: Sync compose file to droplet
+        if: ${{ env.DEPLOY_HOST != '' }}
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: deploy/compose.prod.yml
+          target: /opt/control-plane/
+          strip_components: 1
+
       - name: Roll the droplet forward
         if: ${{ env.DEPLOY_HOST != '' }}
         uses: appleboy/ssh-action@v1.2.0
@@ -78,6 +97,7 @@ jobs:
           script: |
             set -e
             cd /opt/control-plane
+            cp -f compose.prod.yml compose.yml
             docker compose pull
             docker compose up -d
             docker image prune -f
