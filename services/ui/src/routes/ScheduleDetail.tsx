@@ -8,6 +8,7 @@ import {
   resumeSchedule,
 } from '@/lib/schedules'
 import { listJobs } from '@/lib/jobs'
+import { describeCron } from '@/lib/cron'
 import type { JobResponse, JobScheduleResponse } from '@/lib/types'
 import { ApiError } from '@/lib/api'
 import { EnabledBadge, JobStatusBadge, PriorityBadge } from '@/components/ui/Badge'
@@ -175,6 +176,11 @@ function MetadataCard({ schedule }: { schedule: JobScheduleResponse }) {
         <Row label="Priority"><PriorityBadge priority={schedule.priority} /></Row>
         <Row label="Cron">
           <span className="font-mono text-xs">{schedule.cron}</span>
+          {describeCron(schedule.cron) && (
+            <span className="block text-xs text-slate-500">
+              {describeCron(schedule.cron)}
+            </span>
+          )}
         </Row>
         <Row label="Timezone">{schedule.timezone}</Row>
         <Row label="Max retries">{schedule.maxRetries}</Row>

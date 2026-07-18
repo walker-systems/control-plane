@@ -2,6 +2,7 @@ import { useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createSchedule } from '@/lib/schedules'
+import { describeCron } from '@/lib/cron'
 import type { JobPriority, JobType } from '@/lib/types'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
@@ -36,6 +37,9 @@ export function ScheduleCreate() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   )
   const [error, setError] = useState<string | null>(null)
+
+  // Pure local computation, cheap enough to run every render.
+  const cronDescription = describeCron(cron)
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -159,9 +163,17 @@ export function ScheduleCreate() {
               className="font-mono"
               placeholder="0 */5 * * * *"
             />
-            <p className="text-xs text-slate-500">
-              Spring format: sec min hour day month weekday.
-            </p>
+            {/* Live human-readable preview; falls back to the format
+                hint while the expression doesn't parse. Recomputed on
+                every keystroke — it's a pure local function, no
+                request involved. */}
+            {cronDescription ? (
+              <p className="text-xs text-emerald-700">{cronDescription}</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Spring format: sec min hour day month weekday.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="timezone">Timezone</Label>
