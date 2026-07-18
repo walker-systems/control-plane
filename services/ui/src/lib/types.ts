@@ -117,3 +117,28 @@ export interface JobScheduleCreateRequest {
   cron: string
   timezone: string
 }
+
+export type UserStatus = 'ACTIVE' | 'LOCKED' | 'DISABLED'
+
+// GET /api/users, GET /api/users/me. roles is a set on the wire, which
+// Jackson serializes as a JSON array.
+export interface UserResponse {
+  id: string
+  email: string
+  status: UserStatus
+  roles: string[]
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+export interface UserCreateRequest {
+  email: string
+  password: string
+  roles?: string[]
+}
+
+// PATCH /api/users/{id} — null/omitted fields left untouched.
+export interface UserUpdateRequest {
+  status?: UserStatus
+  roles?: string[]
+}

@@ -6,6 +6,7 @@ import { JobDetail } from '@/routes/JobDetail'
 import { SchedulesList } from '@/routes/SchedulesList'
 import { ScheduleDetail } from '@/routes/ScheduleDetail'
 import { ScheduleCreate } from '@/routes/ScheduleCreate'
+import { Users } from '@/routes/Users'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { Layout } from '@/routes/Layout'
 
@@ -32,6 +33,8 @@ function App() {
             <Route path="/schedules" element={<SchedulesList />} />
             <Route path="/schedules/new" element={<ScheduleCreate />} />
             <Route path="/schedules/:id" element={<ScheduleDetail />} />
+            {/* ADMIN-only; the component redirects non-admins to /. */}
+            <Route path="/users" element={<Users />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
