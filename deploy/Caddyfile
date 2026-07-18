@@ -1,0 +1,37 @@
+# Caddy config for the single-droplet deployment. Baked into the web
+# image (see services/ui/Dockerfile).
+#
+# DOMAIN is read from the environment at container start:
+#   - a real hostname ("controlplane.example.com") gets automatic
+#     HTTPS via Let's Encrypt — Caddy provisions and renews certs,
+#     no other TLS setup exists anywhere in this stack;
+#   - ":80" serves plain HTTP, used for local smoke tests of the
+#     production images without DNS.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API traffic goes to the Spring container by compose service
+	# name. Only /api/* is proxied: actuator and any other server
+	# path stay unreachable from the public internet.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Everything else is the React SPA. try_files falls back to
+	# index.html so client-side routes (/jobs/123, /schedules/...)
+	# work on hard refresh and deep links — without it, Caddy would
+	# 404 any path that isn't a real file in /srv.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

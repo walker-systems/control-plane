@@ -1,0 +1,20 @@
+# Both images build with the repo root as context (multi-module Maven
+# needs the parent pom; the web image needs deploy/Caddyfile). Keep the
+# context small — everything below is never needed inside a build.
+.git
+.github
+.claude
+.vscode
+.idea
+
+# Build outputs — the images build from source, never from host artifacts.
+**/target
+**/dist
+**/node_modules
+
+# Local-only files
+env
+.env*
+*.log
+docs
+site
