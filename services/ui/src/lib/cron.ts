@@ -13,8 +13,15 @@ export type IntervalUnit = 'seconds' | 'minutes' | 'hours'
 // Only divisors of the parent unit: */45 on seconds would fire at :00
 // and :45 — a 15s gap at the minute wrap — so uneven steps aren't
 // offered at all.
+//
+// Seconds start at 30 because of the scheduler's materialization
+// floor: ScheduleTickJob wakes every SCHEDULING_TICK_INTERVAL_MS
+// (default 30s) and advanceNextRunAt jumps to the next fire *after*
+// the tick, so a */5s cron would materialize one job per tick — an
+// effective 30s cadence wearing an "every 5 seconds" label. Don't
+// offer what the scheduler can't honor.
 export const INTERVAL_CHOICES: Record<IntervalUnit, number[]> = {
-  seconds: [5, 10, 15, 20, 30],
+  seconds: [30],
   minutes: [1, 2, 5, 10, 15, 30],
   hours: [1, 2, 3, 4, 6, 12],
 }

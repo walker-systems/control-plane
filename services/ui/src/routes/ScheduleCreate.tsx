@@ -120,6 +120,12 @@ export function ScheduleCreate() {
       setError('Max retries must be a whole number from 0 to 20.')
       return
     }
+    // Belt to the time input's `required` braces: a cleared time would
+    // otherwise build a silent-midnight cron via splitTime's 0-default.
+    if ((mode === 'daily' || mode === 'weekly' || mode === 'monthly') && !timeOfDay) {
+      setError('Pick a time of day.')
+      return
+    }
     createMutation.mutate()
   }
 
@@ -265,10 +271,14 @@ export function ScheduleCreate() {
                     (Tailwind resolves conflicts by stylesheet order,
                     not class order). */}
                 <div className="w-36">
+                  {/* required: a cleared time would otherwise fall
+                      through splitTime as 00:00 and silently build a
+                      midnight schedule. onSubmit double-checks. */}
                   <Input
                     type="time"
                     value={timeOfDay}
                     onChange={(e) => setTimeOfDay(e.target.value)}
+                    required
                     disabled={createMutation.isPending}
                     aria-label="Time of day"
                   />
