@@ -7,6 +7,16 @@ theme:
   features:
     - navigation.tabs
 
+# Render ```mermaid fences as diagrams (mkdocs-material ships the
+# integration; GitHub renders the same fences natively, so one syntax
+# works in both places).
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
 nav:
   - Home: index.md
   - Architecture: architecture.md
