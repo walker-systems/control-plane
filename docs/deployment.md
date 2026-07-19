@@ -106,14 +106,21 @@ The two GHCR packages (`control-plane-api`, `control-plane-web`) must be
 anonymously. Keep them private instead by adding a
 `docker login ghcr.io` with a read-only PAT on the droplet.
 
-## The demo account
+## The demo accounts
 
-`compose.prod.yml` bootstraps a shared demo user
-(`demo@control-plane.dev`, OPERATOR role) whose credentials are baked
-into the UI's "Explore the demo" button — that's what makes the public
-demo one-click. To run a private deployment without it, set
-`BOOTSTRAP_DEMO_EMAIL=` and `BOOTSTRAP_DEMO_PASSWORD=` (both empty) in
-`.env`.
+`compose.prod.yml` bootstraps two shared demo personas whose
+credentials are baked into the UI's login page: the primary demo user
+(`demo@control-plane.dev`, OPERATOR — the "Explore the demo" button)
+and a restricted viewer (`viewer@control-plane.dev`, USER — the
+"view as a restricted user" link).
+
+To run a private deployment with **no** demo access, set
+`BOOTSTRAP_DEMO_EMAIL=` and `BOOTSTRAP_DEMO_PASSWORD=` (both empty)
+in `.env` — the viewer persona is conditional on the primary one in
+the bootstrapper, so this single switch disables the entire demo
+surface. (`BOOTSTRAP_DEMO_USER_EMAIL`/`_PASSWORD` exist for
+customizing the viewer's credentials, not for enabling it
+independently.)
 
 ## Day-2 operations
 
