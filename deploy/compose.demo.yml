@@ -79,6 +79,8 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: demo-admin-password
       BOOTSTRAP_DEMO_EMAIL: demo@control-plane.dev
       BOOTSTRAP_DEMO_PASSWORD: demo-password
+      BOOTSTRAP_DEMO_USER_EMAIL: viewer@control-plane.dev
+      BOOTSTRAP_DEMO_USER_PASSWORD: viewer-password
 
   web:
     image: ghcr.io/walker-systems/control-plane-web:latest

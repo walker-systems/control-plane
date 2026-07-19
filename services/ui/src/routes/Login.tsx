@@ -18,12 +18,17 @@ interface LoginResponse {
   expiresIn: number
 }
 
-// Shared demo account, provisioned by the API's bootstrap (OPERATOR
-// role). Deliberately public — the whole point is that a visitor can
-// explore without creating anything. Same credentials work in the
-// local demo compose and on the deployed site.
+// Shared demo accounts, provisioned by the API's bootstrap.
+// Deliberately public — the whole point is that a visitor can explore
+// without creating anything. Same credentials work in the local demo
+// compose and on the deployed site. Two personas so the role gating
+// is something a visitor can *experience*, not just read about:
+// OPERATOR sees every job plus audit trails; USER sees only what it
+// owns and no audit.
 const DEMO_EMAIL = 'demo@control-plane.dev'
 const DEMO_PASSWORD = 'demo-password'
+const VIEWER_EMAIL = 'viewer@control-plane.dev'
+const VIEWER_PASSWORD = 'viewer-password'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -80,6 +85,13 @@ export function Login() {
     // typed nothing. Say what actually went wrong.
     if (!ok) {
       setError('The demo account is not available on this instance.')
+    }
+  }
+
+  async function onViewerClick() {
+    const ok = await signIn(VIEWER_EMAIL, VIEWER_PASSWORD)
+    if (!ok) {
+      setError('The restricted demo account is not available on this instance.')
     }
   }
 
@@ -147,7 +159,20 @@ export function Login() {
             Explore the demo
           </Button>
           <p className="text-center text-xs text-slate-500">
-            One click, no account — signs in as a shared demo user.
+            One click, no account — signs in as a shared demo user
+            (operator view: all jobs + audit trails).
+          </p>
+          <p className="text-center text-xs text-slate-500">
+            Or{' '}
+            <button
+              type="button"
+              onClick={onViewerClick}
+              disabled={submitting}
+              className="underline decoration-slate-400 underline-offset-2 hover:text-slate-700 disabled:opacity-50"
+            >
+              view as a restricted user
+            </button>
+            {' '}— own jobs only, no audit access.
           </p>
         </div>
       </form>

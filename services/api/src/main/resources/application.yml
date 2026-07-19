@@ -69,6 +69,9 @@ app:
     # Optional shared demo account (OPERATOR) for one-click demo login.
     demo-email: ${BOOTSTRAP_DEMO_EMAIL:}
     demo-password: ${BOOTSTRAP_DEMO_PASSWORD:}
+    # Optional restricted USER persona for the role-contrast demo.
+    demo-user-email: ${BOOTSTRAP_DEMO_USER_EMAIL:}
+    demo-user-password: ${BOOTSTRAP_DEMO_USER_PASSWORD:}
   scheduling:
     enabled: ${SCHEDULING_ENABLED:true}
     tick-interval-ms: ${SCHEDULING_TICK_INTERVAL_MS:30000}

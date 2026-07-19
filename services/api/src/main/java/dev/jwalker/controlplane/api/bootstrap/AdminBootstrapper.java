@@ -29,6 +29,7 @@ public class AdminBootstrapper implements ApplicationRunner {
 
     private static final String ADMIN_ROLE = "ADMIN";
     private static final String OPERATOR_ROLE = "OPERATOR";
+    private static final String USER_ROLE = "USER";
 
     private final BootstrapProperties props;
     private final UserRepository userRepository;
@@ -44,9 +45,15 @@ public class AdminBootstrapper implements ApplicationRunner {
             ensureUser(props.adminEmail(), props.adminPassword(), ADMIN_ROLE, "admin");
         }
 
-        // Demo user is opt-in — both properties must be set.
+        // Demo personas are opt-in — both properties of a pair must be
+        // set. The OPERATOR persona is the primary demo login; the USER
+        // persona exists so visitors can see the restricted view (own
+        // jobs only, audit hidden) next to the privileged one.
         if (!isBlank(props.demoEmail()) && !isBlank(props.demoPassword())) {
             ensureUser(props.demoEmail(), props.demoPassword(), OPERATOR_ROLE, "demo");
+        }
+        if (!isBlank(props.demoUserEmail()) && !isBlank(props.demoUserPassword())) {
+            ensureUser(props.demoUserEmail(), props.demoUserPassword(), USER_ROLE, "demo-user");
         }
     }
 

@@ -80,6 +80,7 @@ Tear down with `docker compose -f deploy/compose.demo.yml down -v`.
 | Schedules | 6-field cron + timezone, pause/resume, jobs link back to their schedule |
 | Concurrency | `SKIP LOCKED` claims, exec-then-job lock ordering, lease watchdog |
 | Auditing | Every state transition recorded; audit trail visible to OPERATOR/ADMIN |
+| Security | JWT role claims, refresh rotation, RBAC with admin user management, session revocation on lock — try the two demo personas ([details](docs/security.md)) |
 
 ## Repository layout
 
@@ -94,6 +95,7 @@ docs/          Architecture, API reference, ADRs, deployment runbook
 
 - [Architecture](docs/architecture.md) — queue design, lifecycle, leases, the three ticks
 - [API reference](docs/api.md)
+- [Security model](docs/security.md) — authn/authz, audit, session revocation, honest limitations
 - [Deployment](docs/deployment.md) — droplet + Caddy + GitHub Actions CD
 - [Roadmap](docs/roadmap.md)
 - [ADR-0001: in-process job executor](docs/adr/0001-in-process-job-executor.md)
