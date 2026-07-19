@@ -95,5 +95,6 @@ Reading audit requires OPERATOR or ADMIN.
   flow and fine for a demo; it does mean an XSS bug could read them.
   The CSP-hardened, cookie-based variant is the production upgrade.
 - **The demo accounts are deliberately public.** That's the feature.
-  Private deployments disable them by setting the bootstrap demo vars
-  empty (see [Deployment](deployment.md)).
+  Private deployments blank the bootstrap demo vars (prevents
+  creation) and lock any already-created personas from the admin
+  Users page (see [Deployment](deployment.md)).

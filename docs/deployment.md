@@ -114,13 +114,25 @@ credentials are baked into the UI's login page: the primary demo user
 and a restricted viewer (`viewer@control-plane.dev`, USER — the
 "view as a restricted user" link).
 
-To run a private deployment with **no** demo access, set
-`BOOTSTRAP_DEMO_EMAIL=` and `BOOTSTRAP_DEMO_PASSWORD=` (both empty)
-in `.env` — the viewer persona is conditional on the primary one in
-the bootstrapper, so this single switch disables the entire demo
-surface. (`BOOTSTRAP_DEMO_USER_EMAIL`/`_PASSWORD` exist for
-customizing the viewer's credentials, not for enabling it
-independently.)
+To run a private deployment with **no** demo access, two steps:
+
+1. Set `BOOTSTRAP_DEMO_EMAIL=` and `BOOTSTRAP_DEMO_PASSWORD=` (both
+   empty) in `.env`. This stops the personas from being **created** —
+   the viewer is conditional on the primary pair in the bootstrapper,
+   so the one switch covers both. On a fresh database this is
+   sufficient.
+2. If the deployment has **already** bootstrapped the personas, they
+   persist as ordinary accounts — blanking the vars only skips
+   re-creation. Sign in as the admin, open **Users**, and **Lock**
+   the demo identities that were bootstrapped: whatever addresses the
+   `BOOTSTRAP_DEMO*_EMAIL` vars held before you blanked them
+   (`demo@control-plane.dev` and `viewer@control-plane.dev` unless you
+   customized them — the Users page lists every account, so lock what
+   you see, not what this doc names). Locking also revokes their
+   refresh tokens, so any live sessions die at the next rotation.
+
+(`BOOTSTRAP_DEMO_USER_EMAIL`/`_PASSWORD` exist for customizing the
+viewer's credentials, not for enabling it independently.)
 
 ## Day-2 operations
 

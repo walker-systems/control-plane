@@ -43,7 +43,14 @@ audit trail:
 ![Job detail — dead-lettered job with retry, execution history, audit trail](docs/images/job-detail.png)
 
 <details>
-<summary>Cron schedules — pause/resume, timezone-aware, materialized into jobs</summary>
+<summary>Cron schedules — a dropdown builder generates the expression and translates it to English live</summary>
+
+Pick a repeat pattern and the form writes the cron for you — with a live
+plain-English translation (via cronstrue) confirming both directions.
+Interval choices are restricted to what the scheduler can actually
+honor; a Custom mode keeps raw cron for power users.
+
+![Schedule builder](docs/images/schedule-builder.png)
 
 ![Schedules](docs/images/schedules.png)
 </details>
@@ -78,6 +85,8 @@ Tear down with `docker compose -f deploy/compose.demo.yml down -v`.
 | Job lifecycle | PENDING → RUNNING → SUCCEEDED / FAILED (retry with backoff) → DEAD_LETTER |
 | Cancel semantics | PENDING cancels instantly; RUNNING defers until the in-flight attempt completes |
 | Schedules | 6-field cron + timezone, pause/resume, jobs link back to their schedule |
+| Cron UX | Schedule builder (dropdowns → generated cron) + live English translations of any expression |
+| User management | Admin-only Users section: create accounts, assign roles, lock/disable with session revocation |
 | Concurrency | `SKIP LOCKED` claims, exec-then-job lock ordering, lease watchdog |
 | Auditing | Every state transition recorded; audit trail visible to OPERATOR/ADMIN |
 | Security | JWT role claims, refresh rotation, RBAC with admin user management, session revocation on lock — try the two demo personas ([details](docs/security.md)) |
