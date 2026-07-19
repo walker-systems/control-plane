@@ -13,6 +13,7 @@ import dev.jwalker.controlplane.api.users.web.dto.UserCreateRequest;
 import dev.jwalker.controlplane.api.users.web.dto.UserResponse;
 import dev.jwalker.controlplane.api.users.web.dto.UserUpdateRequest;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -50,7 +52,10 @@ public class UserAdminService {
     public UserResponse create(UserCreateRequest request, AuthenticatedCaller caller) {
         requireAdmin(caller);
 
-        String email = request.email().trim().toLowerCase();
+        // Locale.ROOT: default-locale lowercasing corrupts ASCII on
+        // Turkish/Azerbaijani hosts (I → dotless ı). Email is a
+        // protocol identifier, not display text.
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmail(email)) {
             throw new UserAdminException(
                     UserAdminException.Reason.DUPLICATE_EMAIL,
@@ -64,7 +69,19 @@ public class UserAdminService {
 
         User user = new User(null, email, passwordEncoder.encode(request.password()), UserStatus.ACTIVE);
         roles.forEach(user::addRole);
-        userRepository.save(user);
+        try {
+            // Flush inside the method so a concurrent create that won
+            // the race surfaces HERE as the unique-constraint violation
+            // — the pre-check above is only the friendly fast path.
+            // Without the flush, the violation would fire at commit,
+            // after this handler returned, and reach the client as a
+            // 500 instead of the advertised 409.
+            userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new UserAdminException(
+                    UserAdminException.Reason.DUPLICATE_EMAIL,
+                    "A user with this email already exists");
+        }
 
         auditEventService.record(
                 AuditEventType.USER_CREATED,
