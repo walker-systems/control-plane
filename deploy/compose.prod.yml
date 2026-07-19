@@ -80,8 +80,10 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in .env}
       # Shared demo account (OPERATOR) behind the login page's
       # "Explore the demo" button. The credentials are deliberately
-      # public — they're baked into the UI. Set both to empty in .env
-      # to disable one-click demo access on a private deployment.
+      # public — they're baked into the UI. Setting both empty in .env
+      # stops the personas being created; on an existing deployment
+      # also lock the accounts via the admin Users page (see
+      # docs/deployment.md — blank vars don't touch persisted rows).
       # Single-dash interpolation (${VAR-default}, not ${VAR:-default})
       # is what makes that disable switch work: it defaults only when
       # the var is UNSET, so an explicit empty value in .env passes

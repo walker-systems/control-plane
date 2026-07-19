@@ -24,8 +24,9 @@
   session revocation on lock, self-modification guard, and full audit;
   no self-service registration by design.
 - **Demo personas** — one-click OPERATOR and restricted USER logins so
-  visitors experience the role gating firsthand; disabled by a single
-  switch on private deployments ([security model](security.md)).
+  visitors experience the role gating firsthand; private deployments
+  opt out via bootstrap vars plus an account lock
+  ([security model](security.md)).
 - **Deployment** — Dockerized services, single-droplet compose stack
   behind Caddy (automatic HTTPS), GitHub Actions CD to
   [control-plane.dev](https://control-plane.dev) on every merge.
