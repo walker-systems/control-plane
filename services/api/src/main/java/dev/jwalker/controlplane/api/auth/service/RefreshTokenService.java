@@ -50,6 +50,22 @@ public class RefreshTokenService {
         repository.save(token);
     }
 
+    // Kill every live session for a user — called when an admin locks
+    // or disables the account. Without this, an outstanding refresh
+    // token would keep working until its own expiry check ran; with
+    // it, the lock takes effect at the next refresh (access tokens
+    // still ride out their ≤15-minute lifetime — that window is the
+    // documented trade-off of stateless JWTs).
+    @Transactional
+    public void revokeAllForUser(User user) {
+        repository.findByUser(user).stream()
+                .filter(t -> !t.isRevoked())
+                .forEach(t -> {
+                    t.revoke();
+                    repository.save(t);
+                });
+    }
+
     @Transactional
     public Optional<RefreshToken> revokeIfPresent(String rawToken) {
         String tokenHash = hash(rawToken);
