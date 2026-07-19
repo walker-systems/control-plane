@@ -47,7 +47,7 @@ stateDiagram-v2
     PENDING --> CANCELLED: cancel
     RUNNING --> SUCCEEDED: handler ok
     RUNNING --> FAILED: handler error
-    RUNNING --> CANCELLED: cancel requested,\nattempt completes
+    RUNNING --> CANCELLED: cancel requested; attempt completes
     FAILED --> PENDING: retry with backoff
     FAILED --> DEAD_LETTER: retries exhausted
     DEAD_LETTER --> PENDING: manual retry

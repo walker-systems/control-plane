@@ -5,14 +5,14 @@ GitHub Actions. Every push to `main` builds two images, pushes them to
 GHCR, and rolls the server forward over SSH.
 
 ```
-                    ┌──────────────────────────── droplet ─┐
-  browser ──443──►  │  web (Caddy)                          │
-                    │   ├─ serves the React SPA (static)    │
-                    │   └─ /api/* ──► api (Spring Boot)     │
-                    │                  ├─► postgres          │
-                    │                  ├─► redis             │
-                    │                  └─► rabbitmq          │
-                    └───────────────────────────────────────┘
+                    ┌──────────────────────────── droplet ┐
+  browser ──443──►  │  web (Caddy)                        │
+                    │   ├─ serves the React SPA (static)  │
+                    │   └─ /api/* ──► api (Spring Boot)   │
+                    │                  ├─► postgres       │
+                    │                  ├─► redis          │
+                    │                  └─► rabbitmq       │
+                    └─────────────────────────────────────┘
 ```
 
 Only Caddy binds host ports (80/443). It terminates TLS with an
