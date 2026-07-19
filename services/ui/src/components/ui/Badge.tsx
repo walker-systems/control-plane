@@ -1,4 +1,4 @@
-import type { JobExecutionStatus, JobPriority, JobStatus } from '@/lib/types'
+import type { JobExecutionStatus, JobPriority, JobStatus, UserStatus } from '@/lib/types'
 
 // Small colored pill used for JobStatus, JobExecutionStatus, and
 // JobPriority. Colors are deliberately consistent across the three
@@ -47,4 +47,27 @@ export function EnabledBadge({ enabled }: { enabled: boolean }) {
     ? 'bg-emerald-100 text-emerald-800 ring-emerald-300'
     : 'bg-slate-200 text-slate-700 ring-slate-300'
   return <span className={`${base} ${style}`}>{enabled ? 'ENABLED' : 'PAUSED'}</span>
+}
+
+const userStatusStyle: Record<UserStatus, string> = {
+  ACTIVE: 'bg-emerald-100 text-emerald-800 ring-emerald-300',
+  LOCKED: 'bg-amber-100 text-amber-800 ring-amber-300',
+  DISABLED: 'bg-slate-200 text-slate-700 ring-slate-300',
+}
+
+export function UserStatusBadge({ status }: { status: UserStatus }) {
+  return <span className={`${base} ${userStatusStyle[status]}`}>{status}</span>
+}
+
+// Roles carry authority weight: ADMIN indigo (highest), OPERATOR
+// slate-strong, USER quiet. Unknown roles fall back to neutral.
+const roleStyle: Record<string, string> = {
+  ADMIN: 'bg-indigo-100 text-indigo-800 ring-indigo-300',
+  OPERATOR: 'bg-sky-100 text-sky-800 ring-sky-300',
+  USER: 'bg-slate-100 text-slate-600 ring-slate-300',
+}
+
+export function RoleBadge({ role }: { role: string }) {
+  const style = roleStyle[role] ?? 'bg-slate-100 text-slate-600 ring-slate-300'
+  return <span className={`${base} ${style}`}>{role}</span>
 }
