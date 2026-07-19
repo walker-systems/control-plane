@@ -34,7 +34,7 @@ class AdminBootstrapperTest {
     private PasswordEncoder passwordEncoder;
 
     private static BootstrapProperties adminOnly(String email, String password) {
-        return new BootstrapProperties(true, email, password, "", "");
+        return new BootstrapProperties(true, email, password, "", "", "", "");
     }
 
     @Test
@@ -109,7 +109,7 @@ class AdminBootstrapperTest {
     @Test
     void run_createsDemoUserWithOperatorRole_whenDemoPropsSet() {
         BootstrapProperties props = new BootstrapProperties(
-                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw");
+                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw", "", "");
         Role adminRole = new Role(UUID.randomUUID(), "ADMIN");
         Role operatorRole = new Role(UUID.randomUUID(), "OPERATOR");
 
@@ -133,7 +133,7 @@ class AdminBootstrapperTest {
     @Test
     void run_skipsDemoUser_whenAlreadyExists() {
         BootstrapProperties props = new BootstrapProperties(
-                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw");
+                true, "admin@example.com", "secret-pw", "demo@example.com", "demo-pw", "", "");
 
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
         when(userRepository.existsByEmail("demo@example.com")).thenReturn(true);
@@ -146,9 +146,48 @@ class AdminBootstrapperTest {
     }
 
     @Test
+    void run_createsRestrictedPersonaWithUserRole_whenPrimaryDemoAlsoSet() {
+        BootstrapProperties props = new BootstrapProperties(
+                true, "admin@example.com", "secret-pw",
+                "demo@example.com", "demo-pw", "viewer@example.com", "viewer-pw");
+        Role userRole = new Role(UUID.randomUUID(), "USER");
+
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
+        when(userRepository.existsByEmail("demo@example.com")).thenReturn(true);
+        when(userRepository.existsByEmail("viewer@example.com")).thenReturn(false);
+        when(roleRepository.findByName("USER")).thenReturn(Optional.of(userRole));
+        when(passwordEncoder.encode("viewer-pw")).thenReturn("viewer-hashed");
+
+        AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
+        bootstrapper.run(null);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("viewer@example.com");
+        assertThat(captor.getValue().getRoles()).containsExactly(userRole);
+    }
+
+    @Test
+    void run_skipsRestrictedPersona_whenPrimaryDemoDisabled() {
+        // The documented disable switch empties only the primary demo
+        // pair — the viewer must go down with it, not survive on its
+        // compose defaults.
+        BootstrapProperties props = new BootstrapProperties(
+                true, "admin@example.com", "secret-pw", "", "", "viewer@example.com", "viewer-pw");
+
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
+
+        AdminBootstrapper bootstrapper = new AdminBootstrapper(props, userRepository, roleRepository, passwordEncoder);
+        bootstrapper.run(null);
+
+        verify(userRepository, never()).existsByEmail("viewer@example.com");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void run_skipsDemoUser_whenOnlyEmailSet() {
         BootstrapProperties props = new BootstrapProperties(
-                true, "admin@example.com", "secret-pw", "demo@example.com", "");
+                true, "admin@example.com", "secret-pw", "demo@example.com", "", "", "");
 
         when(userRepository.existsByEmail("admin@example.com")).thenReturn(true);
 

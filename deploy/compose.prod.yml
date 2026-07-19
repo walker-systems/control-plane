@@ -89,6 +89,10 @@ services:
       # by the public default.
       BOOTSTRAP_DEMO_EMAIL: ${BOOTSTRAP_DEMO_EMAIL-demo@control-plane.dev}
       BOOTSTRAP_DEMO_PASSWORD: ${BOOTSTRAP_DEMO_PASSWORD-demo-password}
+      # Restricted USER persona for the role-contrast demo. Same
+      # unset-only interpolation and disable switch as the pair above.
+      BOOTSTRAP_DEMO_USER_EMAIL: ${BOOTSTRAP_DEMO_USER_EMAIL-viewer@control-plane.dev}
+      BOOTSTRAP_DEMO_USER_PASSWORD: ${BOOTSTRAP_DEMO_USER_PASSWORD-viewer-password}
 
   web:
     image: ghcr.io/walker-systems/control-plane-web:${IMAGE_TAG:-latest}

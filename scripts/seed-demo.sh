@@ -77,6 +77,32 @@ for body in "${jobs[@]}"; do
 done
 say "  created $created jobs"
 
+# --- restricted persona's own jobs ---------------------------------
+# The viewer (USER role) sees only jobs it owns — give it a couple so
+# the restricted view demonstrates owner-scoping instead of rendering
+# an empty table. Skipped gracefully on instances without the persona.
+VIEWER_EMAIL="${VIEWER_EMAIL:-viewer@control-plane.dev}"
+VIEWER_PASSWORD="${VIEWER_PASSWORD:-viewer-password}"
+VIEWER_TOKEN=$(curl -sf -X POST "$BASE_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$VIEWER_EMAIL\",\"password\":\"$VIEWER_PASSWORD\"}" 2>/dev/null \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["accessToken"])' 2>/dev/null || true)
+if [ -n "$VIEWER_TOKEN" ]; then
+  vauth=(-H "Authorization: Bearer $VIEWER_TOKEN" -H 'Content-Type: application/json')
+  vjobs=(
+    '{"type":"CUSTOMER_EXPORT","payloadJson":"{\"format\":\"csv\",\"rows\":2500}","priority":"MEDIUM"}'
+    '{"type":"CRM_SYNC","payloadJson":"{\"segment\":\"my-team\"}","priority":"LOW"}'
+  )
+  vcreated=0
+  for body in "${vjobs[@]}"; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/jobs" "${vauth[@]}" -d "$body")
+    [ "$code" = "201" ] && vcreated=$((vcreated+1))
+  done
+  say "  created $vcreated jobs as the restricted viewer persona"
+else
+  say "  (no viewer persona on this instance; skipping its jobs)"
+fi
+
 say ""
 say "Done. Open $BASE_URL — the executor picks jobs up within ~5s;"
 say "the schedules fire on the next minute boundary."
