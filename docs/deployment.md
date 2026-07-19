@@ -124,9 +124,12 @@ To run a private deployment with **no** demo access, two steps:
 2. If the deployment has **already** bootstrapped the personas, they
    persist as ordinary accounts — blanking the vars only skips
    re-creation. Sign in as the admin, open **Users**, and **Lock**
-   `demo@control-plane.dev` and `viewer@control-plane.dev`. Locking
-   also revokes their refresh tokens, so any live sessions die at the
-   next rotation.
+   the demo identities that were bootstrapped: whatever addresses the
+   `BOOTSTRAP_DEMO*_EMAIL` vars held before you blanked them
+   (`demo@control-plane.dev` and `viewer@control-plane.dev` unless you
+   customized them — the Users page lists every account, so lock what
+   you see, not what this doc names). Locking also revokes their
+   refresh tokens, so any live sessions die at the next rotation.
 
 (`BOOTSTRAP_DEMO_USER_EMAIL`/`_PASSWORD` exist for customizing the
 viewer's credentials, not for enabling it independently.)
