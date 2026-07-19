@@ -2,6 +2,14 @@ import { useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createSchedule } from '@/lib/schedules'
+import {
+  buildCron,
+  describeCron,
+  INTERVAL_CHOICES,
+  WEEKDAYS,
+  type IntervalUnit,
+  type Weekday,
+} from '@/lib/cron'
 import type { JobPriority, JobType } from '@/lib/types'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
@@ -12,6 +20,20 @@ const JOB_TYPES: JobType[] = [
   'CUSTOMER_EXPORT', 'STALE_ACCOUNT_CLEANUP', 'SUSPICIOUS_ACCOUNT_SCAN', 'CRM_SYNC',
 ]
 const PRIORITIES: JobPriority[] = ['LOW', 'MEDIUM', 'HIGH']
+
+// Schedule-builder modes: the common shapes as structured controls,
+// with Custom as the raw-cron escape hatch for everything else.
+type RepeatMode = 'interval' | 'daily' | 'weekly' | 'monthly' | 'custom'
+const REPEAT_MODES: { value: RepeatMode; label: string }[] = [
+  { value: 'interval', label: 'Fixed interval' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'custom', label: 'Custom cron' },
+]
+// 1..28 only: days 29-31 silently skip shorter months, which is a
+// trap nobody wants from a dropdown.
+const MONTH_DAYS = Array.from({ length: 28 }, (_, i) => i + 1)
 
 // Shape of the RFC 9457 ProblemDetail the API returns on 400/409,
 // with the `reason` property JobScheduleController adds.
@@ -29,13 +51,38 @@ export function ScheduleCreate() {
   const [payloadJson, setPayloadJson] = useState('{}')
   const [priority, setPriority] = useState<JobPriority>('MEDIUM')
   const [maxRetries, setMaxRetries] = useState('3')
-  const [cron, setCron] = useState('0 */5 * * * *')
   // Default to the browser's zone — right for nearly everyone, and
   // visible/editable for the rest.
   const [timezone, setTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   )
   const [error, setError] = useState<string | null>(null)
+
+  // Schedule builder state. The generated expression is derived, not
+  // stored — only Custom mode has its own text state.
+  const [mode, setMode] = useState<RepeatMode>('interval')
+  const [intervalN, setIntervalN] = useState(5)
+  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('minutes')
+  const [timeOfDay, setTimeOfDay] = useState('09:00')
+  const [weekday, setWeekday] = useState<Weekday>('MON')
+  const [monthDay, setMonthDay] = useState(1)
+  const [customCron, setCustomCron] = useState('0 */5 * * * *')
+
+  const builtCron =
+    mode === 'interval' ? buildCron({ kind: 'interval', n: intervalN, unit: intervalUnit })
+    : mode === 'daily' ? buildCron({ kind: 'daily', time: timeOfDay })
+    : mode === 'weekly' ? buildCron({ kind: 'weekly', weekday, time: timeOfDay })
+    : mode === 'monthly' ? buildCron({ kind: 'monthly', day: monthDay, time: timeOfDay })
+    : customCron
+  // Pure local computation, cheap enough to run every render.
+  const cronDescription = describeCron(builtCron)
+
+  function onModeChange(next: RepeatMode) {
+    // Entering Custom seeds the text field with whatever the builder
+    // last generated, so switching is a refinement, not a reset.
+    if (next === 'custom' && mode !== 'custom') setCustomCron(builtCron)
+    setMode(next)
+  }
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -45,7 +92,7 @@ export function ScheduleCreate() {
         payloadJson,
         priority,
         maxRetries: Number(maxRetries),
-        cron: cron.trim(),
+        cron: builtCron.trim(),
         timezone: timezone.trim(),
       }),
     onSuccess: (created) => {
@@ -71,6 +118,12 @@ export function ScheduleCreate() {
     const retries = Number(maxRetries)
     if (!Number.isInteger(retries) || retries < 0 || retries > 20) {
       setError('Max retries must be a whole number from 0 to 20.')
+      return
+    }
+    // Belt to the time input's `required` braces: a cleared time would
+    // otherwise build a silent-midnight cron via splitTime's 0-default.
+    if ((mode === 'daily' || mode === 'weekly' || mode === 'monthly') && !timeOfDay) {
+      setError('Pick a time of day.')
       return
     }
     createMutation.mutate()
@@ -147,21 +200,129 @@ export function ScheduleCreate() {
           </p>
         </div>
 
+        <div className="space-y-1">
+          <Label htmlFor="repeat-mode">Repeats</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              id="repeat-mode"
+              value={mode}
+              onChange={(v) => onModeChange(v as RepeatMode)}
+              options={REPEAT_MODES.map((m) => m.value)}
+              labels={REPEAT_MODES.map((m) => m.label)}
+              disabled={createMutation.isPending}
+              inline
+            />
+            {mode === 'interval' && (
+              <>
+                <span className="text-sm text-slate-600">every</span>
+                <Select
+                  id="interval-n"
+                  value={String(intervalN)}
+                  onChange={(v) => setIntervalN(Number(v))}
+                  options={INTERVAL_CHOICES[intervalUnit].map(String)}
+                  disabled={createMutation.isPending}
+                  inline
+                />
+                <Select
+                  id="interval-unit"
+                  value={intervalUnit}
+                  onChange={(v) => {
+                    const unit = v as IntervalUnit
+                    setIntervalUnit(unit)
+                    // Keep n valid for the new unit — hours has no 5.
+                    if (!INTERVAL_CHOICES[unit].includes(intervalN)) {
+                      setIntervalN(INTERVAL_CHOICES[unit][0])
+                    }
+                  }}
+                  options={['seconds', 'minutes', 'hours']}
+                  disabled={createMutation.isPending}
+                  inline
+                />
+              </>
+            )}
+            {mode === 'weekly' && (
+              <Select
+                id="weekday"
+                value={weekday}
+                onChange={(v) => setWeekday(v as Weekday)}
+                options={[...WEEKDAYS]}
+                disabled={createMutation.isPending}
+                inline
+              />
+            )}
+            {mode === 'monthly' && (
+              <>
+                <span className="text-sm text-slate-600">on day</span>
+                <Select
+                  id="month-day"
+                  value={String(monthDay)}
+                  onChange={(v) => setMonthDay(Number(v))}
+                  options={MONTH_DAYS.map(String)}
+                  disabled={createMutation.isPending}
+                  inline
+                />
+              </>
+            )}
+            {(mode === 'daily' || mode === 'weekly' || mode === 'monthly') && (
+              <>
+                <span className="text-sm text-slate-600">at</span>
+                {/* Wrapper div owns the width: Input's base w-full
+                    can't be reliably overridden by an appended class
+                    (Tailwind resolves conflicts by stylesheet order,
+                    not class order). */}
+                <div className="w-36">
+                  {/* required: a cleared time would otherwise fall
+                      through splitTime as 00:00 and silently build a
+                      midnight schedule. onSubmit double-checks. */}
+                  <Input
+                    type="time"
+                    value={timeOfDay}
+                    onChange={(e) => setTimeOfDay(e.target.value)}
+                    required
+                    disabled={createMutation.isPending}
+                    aria-label="Time of day"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1 sm:col-span-1">
             <Label htmlFor="cron">Cron (6-field)</Label>
-            <Input
-              id="cron"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-              required
-              disabled={createMutation.isPending}
-              className="font-mono"
-              placeholder="0 */5 * * * *"
-            />
-            <p className="text-xs text-slate-500">
-              Spring format: sec min hour day month weekday.
-            </p>
+            {mode === 'custom' ? (
+              <Input
+                id="cron"
+                value={customCron}
+                onChange={(e) => setCustomCron(e.target.value)}
+                required
+                disabled={createMutation.isPending}
+                className="font-mono"
+                placeholder="0 */5 * * * *"
+              />
+            ) : (
+              // Generated by the builder; read-only so the mapping
+              // stays one-way. Switch to Custom cron to hand-edit.
+              <Input
+                id="cron"
+                value={builtCron}
+                readOnly
+                tabIndex={-1}
+                className="font-mono bg-slate-50 text-slate-600"
+              />
+            )}
+            {/* Live human-readable preview; falls back to the format
+                hint while the expression doesn't parse. Recomputed on
+                every change — it's a pure local function, no request
+                involved. */}
+            {cronDescription ? (
+              <p className="text-xs text-emerald-700">{cronDescription}</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Spring format: sec min hour day month weekday.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="timezone">Timezone</Label>
@@ -236,13 +397,20 @@ function Select({
   value,
   onChange,
   options,
+  labels,
   disabled,
+  inline,
 }: {
   id: string
   value: string
   onChange: (v: string) => void
   options: string[]
+  // Display text per option; defaults to the option values themselves.
+  labels?: string[]
   disabled?: boolean
+  // Inline selects (the schedule builder row) size to content instead
+  // of filling the grid column.
+  inline?: boolean
 }) {
   return (
     <select
@@ -251,12 +419,12 @@ function Select({
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
       className={
-        'h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm ' +
+        `h-10 ${inline ? 'w-auto' : 'w-full'} rounded-md border border-slate-300 bg-white px-3 text-sm ` +
         'focus:outline-none focus:ring-2 focus:ring-slate-950 disabled:opacity-50'
       }
     >
-      {options.map((o) => (
-        <option key={o} value={o}>{o}</option>
+      {options.map((o, i) => (
+        <option key={o} value={o}>{labels?.[i] ?? o}</option>
       ))}
     </select>
   )

@@ -1,6 +1,7 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listSchedules } from '@/lib/schedules'
+import { describeCron } from '@/lib/cron'
 import type { JobType } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { EnabledBadge, PriorityBadge } from '@/components/ui/Badge'
@@ -116,7 +117,11 @@ export function SchedulesList() {
                 <Td className="text-slate-700">{s.type}</Td>
                 <Td><EnabledBadge enabled={s.enabled} /></Td>
                 <Td><PriorityBadge priority={s.priority} /></Td>
-                <Td className="font-mono text-xs text-slate-800">{s.cron}</Td>
+                {/* Raw cron stays visible (compact, precise); the
+                    human-readable translation rides on the tooltip. */}
+                <Td className="font-mono text-xs text-slate-800" title={describeCron(s.cron) ?? undefined}>
+                  {s.cron}
+                </Td>
                 <Td className="text-slate-500">{s.timezone}</Td>
                 <Td className="text-slate-500" title={formatAbsolute(s.nextRunAt)}>
                   {formatRelative(s.nextRunAt)}
