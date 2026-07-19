@@ -16,6 +16,16 @@
 - **Operations UI** — React SPA: live dashboard, job list/detail with
   cancel/retry, schedule management with a create form, role-gated
   audit views.
+- **Cron UX** — a schedule builder that turns dropdown repeat patterns
+  into generated cron (restricted to what the scheduler can honor) and
+  live plain-English translations of any expression, both directions
+  visible at once.
+- **Admin user management** — ADMIN-only create/roles/lock/disable with
+  session revocation on lock, self-modification guard, and full audit;
+  no self-service registration by design.
+- **Demo personas** — one-click OPERATOR and restricted USER logins so
+  visitors experience the role gating firsthand; disabled by a single
+  switch on private deployments ([security model](security.md)).
 - **Deployment** — Dockerized services, single-droplet compose stack
   behind Caddy (automatic HTTPS), GitHub Actions CD to
   [control-plane.dev](https://control-plane.dev) on every merge.

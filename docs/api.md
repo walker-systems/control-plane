@@ -46,6 +46,23 @@ authorization; the UI decodes the same claim for display gating.
 | GET | `/api/audit/target/{type}/{id}` | Audit trail for one entity. OPERATOR/ADMIN only. |
 | GET | `/api/users/me` | Caller's profile. |
 
+## User management (ADMIN only)
+
+There is deliberately no self-service registration — accounts exist
+because an admin created one (or bootstrap seeded it). The gate lives
+in the service layer; non-admins get 403 on every endpoint below.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/users` | Paged list with roles and status. |
+| POST | `/api/users` | Create. BCrypt-hashed password (min 12 chars), roles validated against the roles table (default `USER`). 409 `DUPLICATE_EMAIL` (race-safe via constraint translation), 400 `UNKNOWN_ROLE`. |
+| PATCH | `/api/users/{id}` | Partial update of `status` and/or `roles` (null = untouched). Locking/disabling revokes all refresh tokens. 409 `SELF_MODIFICATION` on your own account. |
+
+Status semantics: `LOCKED`/`DISABLED` accounts are refused at login and
+refresh with 403 `ACCOUNT_LOCKED`/`ACCOUNT_DISABLED` — distinct from
+401 invalid-credentials. Every mutation is audited
+(`USER_CREATED`, `USER_ROLE_CHANGED`, `USER_STATUS_CHANGED`).
+
 ## Operational endpoints
 
 Spring Actuator (`/actuator/health`, `/metrics`, `/prometheus`) is
